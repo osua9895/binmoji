@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -225,7 +224,7 @@ void binmoji_to_string(const struct binmoji *binmoji, char *out_str,
 {
 	size_t i, offset;
 	uint32_t comp;
-	bool needs_zwj, is_country_flag, is_subdivision_flag, no_zwj_sequence;
+	int needs_zwj, is_country_flag, is_subdivision_flag, no_zwj_sequence;
 
 	if (!binmoji || !out_str || out_str_size == 0)
 		return;
