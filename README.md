@@ -1,10 +1,10 @@
-# Binmoji: A Compact 64-bit Emoji Encoding Library
+# binmoji: a lossless, 64-bit emoji encoding
 
 [![Build Status](https://github.com/jb55/binmoji/actions/workflows/ci.yml/badge.svg)](https://github.com/jb55/binmoji/actions/workflows/ci.yml)
 
 [Specification](./SPEC.md)
 
-**Binmoji** is a C library and command-line tool that encodes any standard Unicode emoji into a single, fixed-size 64-bit integer (`uint64_t`). This provides a highly efficient, compact, and indexable alternative to storing emojis as variable-length UTF-8 strings.
+**binmoji** is a C library and command-line tool that encodes any standard Unicode emoji into a single, fixed-size 64-bit integer (`uint64_t`). This provides a highly efficient, compact, and indexable alternative to storing emojis as variable-length UTF-8 strings.
 
 -----
 
@@ -33,6 +33,24 @@ An emoji sequence is deconstructed into its fundamental parts, which are then pa
 | `3-0`       | **Flags** | 4           | Reserved for future use.                                     |
 
 Because hashing is a one-way process, a pre-computed lookup table (`emoji_hash_table.h`) is used to map a **Component Hash** back to its original list of component codepoints during decoding.
+
+-----
+
+## Motivation
+
+I was designing a cache-friendly, zero-copy metadata table for [nostrdb][nostrdb]. This table needed a way to record the number of reactions a nostr note has received for various different emoji reactions. To do this, the data needed to be aligned in the database as an array of metadata entries.
+
+The problem is emojis are not just single characters, they can sometimes be composed of many different unicode codepoints separated by zero width joiners:
+
+<img src="https://jb55.com/s/4be36a0c17dbcd0f.png" width="50%" />
+
+To avoid having annoying data structures like string tables, I wanted a way to simply have a fixed sized representation of any emoji. Hence, this library was born.
+
+binmoji can be used for storing emojis in succinct data structures without having to deal with the headache of separate string storage.
+
+### Why not just hash all of the codepoints?
+
+I wanted an emoji ID that didn't require massive rainbow tables for every possible emoji combination. by moving some skin tone data into bits, our lookup table can be much smaller, which avoids code bloat.
 
 -----
 
@@ -126,3 +144,5 @@ The main functions are:
     * Decodes a 64-bit ID into a `struct binmoji`, using an internal hash table to look up components.
 * `void binmoji_to_string(const struct binmoji *binmoji, char *out_str, size_t out_str_size);`
     * Builds the final UTF-8 emoji string from a `struct binmoji`.
+
+[nostrdb]: https://github.com/damus-io/nostrdb
