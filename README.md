@@ -42,7 +42,7 @@ I was designing a cache-friendly, zero-copy metadata table for [nostrdb][nostrdb
 
 The problem is emojis are not just single characters, they can sometimes be composed of many different unicode codepoints separated by zero width joiners:
 
-<img src="https://jb55.com/s/4be36a0c17dbcd0f.png" width="50%" />
+![](https://jb55.com/s/4be36a0c17dbcd0f.png)
 
 To avoid having annoying data structures like string tables, I wanted a way to simply have a fixed sized representation of any emoji. Hence, this library was born.
 
