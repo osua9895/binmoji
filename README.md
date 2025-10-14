@@ -112,15 +112,15 @@ A successful run will report zero failures.
 
 ## Library API Overview
 
-You can integrate the core logic into your own C/C++ projects by including `binmoji.c` and `emoji_hash_table.h`.
+You can integrate the core logic into your own C projects by including the header `binmoji.h` and compiling/linking `binmoji.c`. The main data structure is `struct binmoji`.
 
 The main functions are:
 
-  * `void parse_emoji_string(const char *emoji_str, EmojiComponents *components);`
-      * Parses a UTF-8 string into the `EmojiComponents` struct.
-  * `uint64_t generate_emoji_id(const EmojiComponents *components);`
-      * Generates a 64-bit ID from a populated `EmojiComponents` struct.
-  * `void decode_emoji_id(uint64_t id, EmojiComponents *components);`
-      * Decodes a 64-bit ID into an `EmojiComponents` struct, using the hash table to look up components.
-  * `void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, size_t out_str_size);`
-      * Builds the final UTF-8 emoji string from a decoded `EmojiComponents` struct.
+* `void binmoji_parse(const char *emoji, struct binmoji *binmoji);`
+    * Parses a UTF-8 emoji string into the `struct binmoji`.
+* `uint64_t binmoji_encode(const struct binmoji *binmoji);`
+    * Generates a 64-bit ID from a populated `struct binmoji`.
+* `void binmoji_decode(uint64_t id, struct binmoji *binmoji);`
+    * Decodes a 64-bit ID into a `struct binmoji`, using an internal hash table to look up components.
+* `void binmoji_to_string(const struct binmoji *binmoji, char *out_str, size_t out_str_size);`
+    * Builds the final UTF-8 emoji string from a `struct binmoji`.
