@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-/* ## 2. STRUCTS AND HASHING (Unchanged) */
 struct binmoji {
 	uint32_t primary_cp;
 	uint32_t component_list[16];
