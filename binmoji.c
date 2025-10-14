@@ -24,10 +24,10 @@ typedef struct {
 	uint32_t components[16];
 } EmojiHashEntry;
 
-#include "emoji_hash_table.h"
+#include "binmoji_table.h"
 
 const size_t num_hash_entries =
-    sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);
+    sizeof(binmoji_table) / sizeof(binmoji_table[0]);
 
 static uint32_t crc32(const uint32_t *data, size_t length)
 {
@@ -148,7 +148,7 @@ static int compare_emoji_hash(const void *key, const void *element)
 static int lookup_binmoji_by_hash(uint32_t hash, uint32_t *out_binmoji,
 				  size_t *out_count)
 {
-	const EmojiHashEntry *result = bsearch(&hash, emoji_hash_table,
+	const EmojiHashEntry *result = bsearch(&hash, binmoji_table,
 					       num_hash_entries,
 					       sizeof(EmojiHashEntry),
 					       compare_emoji_hash);
