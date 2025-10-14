@@ -86,7 +86,7 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
 ### 5. Decoding Process (64-bit ID → Emoji String)
 
 1.  **Extract Fields:** The `primary_codepoint`, `component_hash`, `skin_tone1`, `skin_tone2`, and `flags` are extracted from the 64-bit ID using bitmasks and shifts.
-2.  **Lookup Components:** If `component_hash` is not zero, it is used as a key to look up the original `component_list` in the pre-computed `emoji_hash_table.h`. If the hash is not found, the emoji cannot be fully reconstructed.
+2.  **Lookup Components:** If `component_hash` is not zero, it is used as a key to look up the original `component_list` in the pre-computed `binmoji_table.h`. If the hash is not found, the emoji cannot be fully reconstructed.
 3.  **Reconstruct String:** The final UTF-8 emoji string is built in sequence:
     a. Append the `primary_codepoint`.
 
@@ -109,13 +109,13 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
 The Binmoji format relies on a pre-computed lookup table to reverse the component hash.
 
 #### `generate_hash_table.py`
-This Python script is responsible for creating the `emoji_hash_table.h` C header file. Its process is:
+This Python script is responsible for creating the `binmoji_table.h` C header file. Its process is:
 
 1.  Downloads the official emoji data files (`emoji-sequences.txt`, `emoji-test.txt`, `emoji-zwj-sequences.txt`, etc.) from the Unicode Consortium for a specific version (e.g., 15.1).
 2.  Parses every valid emoji sequence from these files.
 3.  For each sequence with components, it calculates the CRC-32 hash using a Python implementation identical to the C version.
 4.  It stores each unique hash and its corresponding component list.
-5.  Finally, it writes all unique hash-component pairs into a static C array (`EmojiHashEntry emoji_hash_table[]`) in the header file, sorted by hash value.
+5.  Finally, it writes all unique hash-component pairs into a static C array (`EmojiHashEntry binmoji_table[]`) in the header file, sorted by hash value.
 
-#### `emoji_hash_table.h`
+#### `binmoji_table.h`
 This auto-generated file contains the static lookup table. This table is essential for the `decode_emoji_id` function to operate correctly. Any application using the Binmoji decoder must be compiled with this header.
