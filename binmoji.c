@@ -48,7 +48,7 @@ uint32_t crc32(const uint32_t *data, size_t length)
 	return crc;
 }
 
-// ## 3. PARSER (Unchanged from your version)
+// ## 3. PARSER (Unchanged)
 int is_base_emoji(uint32_t cp)
 {
 	if (cp >= 0x1F3FB && cp <= 0x1F3FF) // Skin Tones
@@ -91,8 +91,7 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
 				components->skin_tone1 = tone_val;
 			else if (components->skin_tone2 == 0)
 				components->skin_tone2 = tone_val;
-		}
-		else if (is_base_emoji(cp)) {
+		} else if (is_base_emoji(cp)) {
 			if (components->primary_cp == 0) {
 				components->primary_cp = cp;
 			} else if (components->component_count < 16) {
@@ -162,7 +161,7 @@ void decode_emoji_id(uint64_t id, EmojiComponents *components)
 	}
 }
 
-// ## 5. RECONSTRUCTOR (Corrected Logic)
+// ## 5. RECONSTRUCTOR (Unchanged)
 int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 {
 	if (!buf)
@@ -209,19 +208,14 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 	size_t offset = 0;
 	out_str[0] = '\0';
 
-	// Case 1: Country Flag (e.g., U+1F1E8 U+1F1E6 for 🇨🇦)
 	bool is_country_flag = (components->primary_cp >= 0x1F1E6 &&
 				components->primary_cp <= 0x1F1FF);
 
-	// Case 2: Subdivision Flag (e.g., 🏴󠁧󠁢󠁥󠁮󠁧󠁿)
-	// This sequence starts with a black flag and its first component is a
-	// tag specifier.
 	bool is_subdivision_flag = (components->primary_cp == 0x1F3F4 &&
 				    components->component_count > 0 &&
 				    components->component_list[0] >= 0xE0020 &&
 				    components->component_list[0] <= 0xE007F);
 
-	// A ZWJ should not be used for either type of flag sequence.
 	bool no_zwj_sequence = is_country_flag || is_subdivision_flag;
 
 	if (components->primary_cp > 0) {
@@ -236,15 +230,12 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 
 	for (size_t i = 0; i < components->component_count; i++) {
 		uint32_t comp = components->component_list[i];
-
-		// Also check for the Enclosing Keycap codepoint U+20E3
 		bool needs_zwj = (comp != 0xFE0F && comp != 0x20E3 && !no_zwj_sequence);
 
 		if (needs_zwj) {
 			append_utf8(out_str, out_str_size, &offset,
 				    0x200D); // ZWJ
 		}
-
 		append_utf8(out_str, out_str_size, &offset, comp);
 
 		if (i == components->component_count - 1 &&
@@ -261,7 +252,7 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 }
 
 
-// ## 6. TEST RUNNER
+// ## 6. MAIN AND TEST RUNNER (Updated)
 int run_test_suite(const char *filename)
 {
 	FILE *f = fopen(filename, "r");
@@ -278,16 +269,12 @@ int run_test_suite(const char *filename)
 
 	while (fgets(line, sizeof(line), f)) {
 		line_num++;
-		// Skip comments and blank lines
 		if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
 			continue;
 		}
 
-		// Check if the line defines a range or a single sequence
 		if (strstr(line, "..")) {
-			// --- HANDLE RANGES (e.g., 1F31D..1F31E) ---
 			uint32_t start_cp, end_cp;
-			// sscanf is perfect for parsing the hex range at the start of the line
 			if (sscanf(line, "%X..%X", &start_cp, &end_cp) == 2) {
 				for (uint32_t cp = start_cp; cp <= end_cp; ++cp) {
 					char original_emoji[8] = {0};
@@ -355,7 +342,7 @@ int run_test_suite(const char *filename)
 	return tests_failed;
 }
 
-int main()
+int run_all_tests()
 {
 	const char *test_files[] = {
 	    "emoji-sequences.txt",
@@ -380,4 +367,55 @@ int main()
 		    total_failures);
 		return EXIT_FAILURE;
 	}
+}
+
+int main(int argc, char *argv[])
+{
+	// Check for --test flag to run the test suite
+	if (argc == 2 && strcmp(argv[1], "--test") == 0) {
+		return run_all_tests();
+	}
+
+	// For conversions, exactly one argument is required
+	if (argc != 2) {
+		fprintf(stderr, "Usage:\n");
+		fprintf(stderr, "  %s \"<emoji>\"       (to convert emoji to hex ID)\n", argv[0]);
+		fprintf(stderr, "  %s <0x_hex_id>     (to convert hex ID to emoji)\n", argv[0]);
+		fprintf(stderr, "  %s --test          (to run the test suite)\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	const char *input = argv[1];
+
+	// Check if the input is a hex ID (must start with "0x")
+	if (strncmp(input, "0x", 2) == 0) {
+		// --- DECODE from Hex ID to Emoji ---
+		char *endptr;
+		uint64_t id = strtoull(input, &endptr, 16);
+
+		if (*endptr != '\0') {
+			fprintf(stderr, "Error: Invalid hexadecimal ID format: %s\n", input);
+			return EXIT_FAILURE;
+		}
+
+		EmojiComponents components;
+		char emoji_buffer[64] = {0};
+
+		decode_emoji_id(id, &components);
+		reconstruct_emoji_string(&components, emoji_buffer, sizeof(emoji_buffer));
+
+		printf("ID:    %s\n", input);
+		printf("Emoji: \"%s\"\n", emoji_buffer);
+
+	} else {
+		// --- ENCODE from Emoji to Hex ID ---
+		EmojiComponents components;
+		parse_emoji_string(input, &components);
+		uint64_t id = generate_emoji_id(&components);
+
+		printf("Emoji: \"%s\"\n", input);
+		printf("ID:    0x%016lX\n", id);
+	}
+
+	return EXIT_SUCCESS;
 }
