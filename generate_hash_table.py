@@ -86,6 +86,7 @@ UNICODE_VERSION = "15.1"
 BASE_URL = f"https://unicode.org/Public/emoji/{UNICODE_VERSION}/"
 FILE_LIST = [
     "emoji-sequences.txt",
+    "emoji-test.txt",
     "emoji-zwj-sequences.txt",
 ]
 OUTPUT_HEADER = "emoji_hash_table.h"

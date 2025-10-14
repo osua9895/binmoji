@@ -371,6 +371,7 @@ int main()
 {
 	const char *test_files[] = {
 	    "emoji-sequences.txt",
+	    "emoji-test.txt",
 	    "emoji-zwj-sequences.txt",
 	};
 	int total_failures = 0;
