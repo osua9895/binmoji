@@ -1,7 +1,6 @@
 .direnv/
 .envrc
 shell.nix
-*.txt
 tags
 binmoji
 build.log
