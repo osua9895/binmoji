@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
 		binmoji_parse(input, &binmoji);
 		id = binmoji_encode(&binmoji);
 
-		printf("0x%016lX\n", id);
+		printf("0x%016" PRIX64 "\n", id);
 	}
 
 	return EXIT_SUCCESS;
