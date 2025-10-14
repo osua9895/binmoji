@@ -1,7 +1,8 @@
 # Binmoji: A Compact 64-bit Emoji Encoding Library
 
+[![Build Status](https://github.com/jb55/binmoji/actions/workflows/ci.yml/badge.svg)](https://github.com/jb55/binmoji/actions/workflows/ci.yml)
+
 [Specification](./SPEC.md)
-[](https://opensource.org/licenses/MIT)
 
 **Binmoji** is a C library and command-line tool that encodes any standard Unicode emoji into a single, fixed-size 64-bit integer (`uint64_t`). This provides a highly efficient, compact, and indexable alternative to storing emojis as variable-length UTF-8 strings.
 
@@ -36,7 +37,7 @@ Because hashing is a one-way process, a pre-computed lookup table (`emoji_hash_t
 
 ## Building the Project 🛠️
 
-Just type `make` with a C compiler. You can regenerate the small ZWJ sequence hash table by getting the txt files from https://www.unicode.org/Public/17.0.0/emoji/
+Just type `make` with a C compiler. You can regenerate the small ZWJ sequence hash table by getting the txt files from https://www.unicode.org/Public/17.0.0/emoji/. We also provide a snapshot of these in the repository for convenience.
 
 -----
 
