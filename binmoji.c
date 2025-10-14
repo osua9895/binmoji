@@ -48,22 +48,16 @@ uint32_t crc32(const uint32_t *data, size_t length)
 	return crc;
 }
 
-// ## 3. PARSER (Refactored)
-// In is_base_emoji, remove the checks for gender and VS16.
-// The only things that are NOT base characters are skin tones and the ZWJ
-// itself.
+// ## 3. PARSER (Unchanged from your version)
 int is_base_emoji(uint32_t cp)
 {
 	if (cp >= 0x1F3FB && cp <= 0x1F3FF) // Skin Tones
 		return 0;
 	if (cp == 0x200D) // Zero Width Joiner
 		return 0;
-	// Gender signs (2640, 2642) and VS16 (FE0F) are now considered
-	// components.
 	return 1;
 }
 
-// In parse_emoji_string, remove the flag logic for gender and VS16.
 void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
 {
 	memset(components, 0, sizeof(EmojiComponents));
@@ -98,7 +92,6 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
 			else if (components->skin_tone2 == 0)
 				components->skin_tone2 = tone_val;
 		}
-		// REMOVED GENDER AND VS16 FLAG LOGIC. They are now components.
 		else if (is_base_emoji(cp)) {
 			if (components->primary_cp == 0) {
 				components->primary_cp = cp;
@@ -112,7 +105,7 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
 	    crc32(components->component_list, components->component_count);
 }
 
-// ## 4. ID GENERATOR AND LOOKUP TABLE (Updated to use generated header)
+// ## 4. ID GENERATOR AND LOOKUP TABLE (Unchanged)
 uint64_t generate_emoji_id(const EmojiComponents *components)
 {
 	uint64_t id = 0;
@@ -132,7 +125,6 @@ typedef struct {
 	uint32_t components[16];
 } EmojiHashEntry;
 
-// Include the auto-generated hash table (make sure it's up to date!)
 #include "emoji_hash_table.h"
 
 const size_t num_hash_entries =
@@ -217,8 +209,6 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 	size_t offset = 0;
 	out_str[0] = '\0';
 
-	// **MODIFICATION START**
-
 	// Case 1: Country Flag (e.g., U+1F1E8 U+1F1E6 for 🇨🇦)
 	bool is_country_flag = (components->primary_cp >= 0x1F1E6 &&
 				components->primary_cp <= 0x1F1FF);
@@ -234,8 +224,6 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 	// A ZWJ should not be used for either type of flag sequence.
 	bool no_zwj_sequence = is_country_flag || is_subdivision_flag;
 
-	// **MODIFICATION END**
-
 	if (components->primary_cp > 0) {
 		append_utf8(out_str, out_str_size, &offset,
 			    components->primary_cp);
@@ -249,8 +237,8 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 	for (size_t i = 0; i < components->component_count; i++) {
 		uint32_t comp = components->component_list[i];
 
-		// Use the new, more comprehensive check here.
-		bool needs_zwj = (comp != 0xFE0F && !no_zwj_sequence);
+		// Also check for the Enclosing Keycap codepoint U+20E3
+		bool needs_zwj = (comp != 0xFE0F && comp != 0x20E3 && !no_zwj_sequence);
 
 		if (needs_zwj) {
 			append_utf8(out_str, out_str_size, &offset,
@@ -272,7 +260,8 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 		out_str[out_str_size - 1] = '\0';
 }
 
-// ## 6. TEST RUNNER (Corrected to handle ranges)
+
+// ## 6. TEST RUNNER
 int run_test_suite(const char *filename)
 {
 	FILE *f = fopen(filename, "r");
@@ -310,7 +299,7 @@ int run_test_suite(const char *filename)
 
 					parse_emoji_string(original_emoji, &components);
 					uint64_t id = generate_emoji_id(&components);
-					decode_emoji_id(id, &components); // Re-use 'components' struct
+					decode_emoji_id(id, &components);
 					reconstruct_emoji_string(&components, reconstructed_emoji, sizeof(reconstructed_emoji));
 
 					if (strcmp(original_emoji, reconstructed_emoji) != 0) {
@@ -323,7 +312,6 @@ int run_test_suite(const char *filename)
 				}
 			}
 		} else {
-			// --- HANDLE SINGLE SEQUENCES (e.g., from emoji-zwj-sequences.txt) ---
 			char *hash_char = strchr(line, '#');
 			if (!hash_char) continue;
 
