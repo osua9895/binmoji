@@ -1,18 +1,17 @@
-#!/usr/bin/env python3
+import os
 import sys
-import argparse
+import urllib.request
 from typing import List, Dict, Set
 
 # -----------------------------------------------------------------------------
-# 1. REPLICATION OF THE C LOGIC (from your components.py)
-# This section ensures the hashing algorithm is identical to your C code.
+# 1. REPLICATION OF THE C LOGIC
+# This section mirrors your C implementation for perfect compatibility.
 # -----------------------------------------------------------------------------
 
 def crc32(data: List[int]) -> int:
     """
     Calculates a 32-bit CRC hash on a list of 32-bit integers (codepoints).
-    This is a direct Python port of the bitwise CRC32 implementation
-    from the provided C code.
+    This is a direct Python port of the C implementation.
     """
     crc = 0xFFFFFFFF
     poly = 0x04C11DB7
@@ -34,34 +33,48 @@ def crc32(data: List[int]) -> int:
 def is_base_emoji(cp: int) -> bool:
     """
     Checks if a codepoint is a base emoji character, mirroring the C helper.
-    Returns False for modifiers like skin tones, ZWJ, and gender signs.
     """
     if 0x1F3FB <= cp <= 0x1F3FF:  # Skin Tones
         return False
-    # ZWJ, Variation Selectors, and Gender signs are not base emojis
-    if cp in [0x200D, 0xFE0F, 0x2640, 0x2642]:
+    if cp in [0x200D, 0xFE0F]:    # ZWJ, Variation Selector
+        return False
+    if cp in [0x2640, 0x2642]:    # Gender signs (Female, Male)
         return False
     return True
 
-def parse_emoji_string(emoji_str: str) -> Dict:
+def parse_codepoints_to_components(codepoints: List[int]) -> Dict:
     """
-    Parses a UTF-8 emoji string into its components, just like the C code,
-    to identify the primary codepoint and the component list for hashing.
+    Parses a list of codepoints into its primary, components, tones, and flags.
+    This logic must exactly match the C parser.
     """
     components = {
         'primary_cp': 0,
         'component_list': [],
+        'skin_tone1': 0,
+        'skin_tone2': 0,
+        'flags': 0,
         'hash': 0
     }
     
-    codepoints = [ord(c) for c in emoji_str]
-
     for cp in codepoints:
-        # We only care about base emojis for the primary and component list
-        if is_base_emoji(cp):
+        if 0x1F3FB <= cp <= 0x1F3FF:
+            tone_val = (cp - 0x1F3FB) + 1
+            if components['skin_tone1'] == 0:
+                components['skin_tone1'] = tone_val
+            elif components['skin_tone2'] == 0:
+                components['skin_tone2'] = tone_val
+        elif cp == 0x2642:
+            components['flags'] |= 1  # Male flag
+        elif cp == 0x2640:
+            components['flags'] |= 2  # Female flag
+        elif cp == 0xFE0F:
+            # VS16 flag applies if it immediately follows the primary codepoint
+            if components['primary_cp'] != 0 and not components['component_list']:
+                components['flags'] |= 4
+        elif is_base_emoji(cp):
             if components['primary_cp'] == 0:
                 components['primary_cp'] = cp
-            else:
+            elif len(components['component_list']) < 16:
                 components['component_list'].append(cp)
 
     if components['component_list']:
@@ -70,102 +83,86 @@ def parse_emoji_string(emoji_str: str) -> Dict:
     return components
 
 # -----------------------------------------------------------------------------
-# 2. FILE PROCESSING AND C CODE GENERATION
+# 2. EMOJI DATA PROCESSING AND FILE GENERATION
 # -----------------------------------------------------------------------------
 
-def process_unicode_file(file_path: str, hash_map: Dict[int, List[int]], seen_emojis: Set[str]):
-    """
-    Reads a Unicode data file, parses ZWJ sequences, and populates the hash_map.
-    """
-    sys.stderr.write(f"Processing file: {file_path}...\n")
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            # Skip comments and empty lines
-            if line.startswith('#') or not line.strip():
-                continue
-            
-            # We are only interested in ZWJ sequences for the component hash table
-            if 'ZWJ' not in line:
-                continue
+UNICODE_VERSION = "15.1"
+BASE_URL = f"https://unicode.org/Public/emoji/{UNICODE_VERSION}/"
+FILE_LIST = [
+    "emoji-sequences.txt",
+    "emoji-zwj-sequences.txt",
+]
+OUTPUT_HEADER = "emoji_hash_table.h"
 
-            # Extract the emoji character sequence from the line
-            try:
-                # Format is typically `... ; status # EMOJI ...`
-                emoji_char = line.split('#')[1].strip().split(' ')[0]
-            except IndexError:
-                continue # Line doesn't contain a parsable emoji character
+def download_file(url: str, filename: str) -> None:
+    """Downloads a file if it doesn't exist locally."""
+    if not os.path.exists(filename):
+        sys.stderr.write(f"Downloading {filename} from Unicode Consortium...\n")
+        try:
+            urllib.request.urlretrieve(url, filename)
+        except Exception as e:
+            sys.stderr.write(f"Error downloading {url}: {e}\n")
+            sys.exit(1)
 
-            # Skip duplicates to avoid redundant processing
-            if emoji_char in seen_emojis:
-                continue
-            seen_emojis.add(emoji_char)
+def generate_c_header(hashes: Dict[int, List[int]]):
+    """Writes the collected hash data to a C header file."""
+    sys.stderr.write(f"Generating C header file: {OUTPUT_HEADER}\n")
+    with open(OUTPUT_HEADER, 'w', encoding='utf-8') as f:
+        f.write("#ifndef EMOJI_HASH_TABLE_H\n")
+        f.write("#define EMOJI_HASH_TABLE_H\n\n")
+        f.write("#include <stddef.h>\n")
+        f.write("#include <stdint.h>\n\n")
+        f.write("/* This file is auto-generated by generate_hash_table.py */\n\n")
+        f.write("static const EmojiHashEntry emoji_hash_table[] = {\n")
 
-            # Parse the string to find components and generate a hash
-            parsed = parse_emoji_string(emoji_char)
-            
-            # We only add entries that have components (and thus a hash)
-            if parsed['hash'] != 0 and parsed['component_list']:
-                # Store the component list, keyed by its hash.
-                # This automatically handles duplicates from different files.
-                hash_map[parsed['hash']] = parsed['component_list']
-
-def generate_c_code(hash_map: Dict[int, List[int]]):
-    """
-    Generates the C header file content from the final hash map.
-    """
-    print("/*")
-    print(" * Generated by generate_hash_table.py. DO NOT EDIT MANUALLY.")
-    print(f" * Total Unique ZWJ Component Hashes: {len(hash_map)}")
-    print(" */\n")
-    print("static const EmojiHashEntry emoji_hash_table[] = {")
-
-    # Sort by hash for a consistent, deterministic output
-    sorted_hashes = sorted(hash_map.keys())
-    
-    for hash_val in sorted_hashes:
-        components = hash_map[hash_val]
-        count = len(components)
+        # Sort by hash for consistent output
+        for hash_val, components in sorted(hashes.items()):
+            comp_str = ", ".join([f"0x{c:X}" for c in components])
+            f.write(f"    {{0x{hash_val:08X}, {len(components)}, {{{comp_str}}}}},\n")
         
-        # Format components as a C array initializer list (e.g., { 0x2194 })
-        components_c_array = ", ".join([f"0x{cp:X}" for cp in components])
-        
-        # Format the final line for the C struct
-        print(f"    {{ 0x{hash_val:08X}, {count}, {{ {components_c_array} }} }},")
-        
-    print("};")
-    print("\nconst size_t num_hash_entries = sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);")
-
+        f.write("};\n\n")
+        f.write("#endif // EMOJI_HASH_TABLE_H\n")
+    sys.stderr.write("Header file generated successfully.\n")
 
 def main():
-    """
-    Main function to parse arguments and drive the generation process.
-    """
-    parser = argparse.ArgumentParser(
-        description="Generate a C hash table from Unicode emoji data files."
-    )
-    parser.add_argument(
-        "files",
-        nargs='+',
-        help="Paths to emoji-test.txt, emoji-sequences.txt, etc."
-    )
-    args = parser.parse_args()
+    """Main function to process emoji data and generate the C header."""
+    for filename in FILE_LIST:
+        download_file(BASE_URL + filename, filename)
+    
+    # Use a dictionary to store unique hashes and their component lists
+    unique_hashes: Dict[int, List[int]] = {}
+    processed_sequences: Set[tuple] = set()
 
-    # Master map to store final {hash: [component_list]} pairs
-    master_hash_map = {}
-    # Set to track processed emoji strings to avoid duplicates
-    seen_emojis = set()
+    for filename in FILE_LIST:
+        sys.stderr.write(f"\n--- Processing {filename} ---\n")
+        with open(filename, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.startswith('#') or not line.strip():
+                    continue
+                
+                # Extract codepoints from the beginning of the line
+                codepoint_str = line.split(';')[0].strip()
+                try:
+                    codepoints = [int(cp, 16) for cp in codepoint_str.split()]
+                except ValueError:
+                    continue # Skip malformed lines
 
-    for file_path in args.files:
-        try:
-            process_unicode_file(file_path, master_hash_map, seen_emojis)
-        except FileNotFoundError:
-            sys.stderr.write(f"Error: File not found at '{file_path}'\n")
-            sys.exit(1)
-            
-    sys.stderr.write("\nGeneration complete.\n")
-    generate_c_code(master_hash_map)
+                # Avoid processing the same sequence twice if it appears in multiple files
+                if tuple(codepoints) in processed_sequences:
+                    continue
+                processed_sequences.add(tuple(codepoints))
 
+                # Parse and hash the sequence
+                parsed = parse_codepoints_to_components(codepoints)
+                
+                # We only care about sequences that have components
+                if parsed['hash'] != 0:
+                    if parsed['hash'] in unique_hashes and unique_hashes[parsed['hash']] != parsed['component_list']:
+                        sys.stderr.write(f"Collision detected! Hash 0x{parsed['hash']:08X} is shared.\n")
+                    unique_hashes[parsed['hash']] = parsed['component_list']
+
+    sys.stderr.write(f"\nFound {len(unique_hashes)} unique component sequences with hashes.\n")
+    generate_c_header(unique_hashes)
 
 if __name__ == "__main__":
     main()

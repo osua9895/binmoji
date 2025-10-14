@@ -1,8 +1,9 @@
-#include <stdio.h>
+#include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 // ## 1. DEFINITIONS (Unchanged)
 #define PRIMARY_CP_SHIFT 42
@@ -32,6 +33,7 @@ uint32_t crc32(const uint32_t *data, size_t length) {
     if (data == NULL || length == 0) return 0;
     for (size_t i = 0; i < length; ++i) {
         uint32_t item = data[i];
+        // Use a standard table-based CRC32 for production, this is slow but simple
         for (int j = 0; j < 32; ++j) {
             uint32_t bit = (item >> (31 - j)) & 1;
             if ((crc >> 31) ^ bit) {
@@ -51,10 +53,10 @@ int is_base_emoji(uint32_t cp) {
     return 1;
 }
 
-// ## 3. PARSER (MODIFIED)
-void parse_emoji_string(const char* emoji_str, EmojiComponents* components) {
+// ## 3. PARSER (Unchanged)
+void parse_emoji_string(const char *emoji_str, EmojiComponents *components) {
     memset(components, 0, sizeof(EmojiComponents));
-    const unsigned char* s = (const unsigned char*)emoji_str;
+    const unsigned char *s = (const unsigned char *)emoji_str;
     while (*s) {
         uint32_t cp = 0;
         int len = 0;
@@ -73,10 +75,9 @@ void parse_emoji_string(const char* emoji_str, EmojiComponents* components) {
             components->flags |= 1; // Male flag
         } else if (cp == 0x2640) {
             components->flags |= 2; // Female flag
-        } else if (cp == 0xFE0F) {  // NEW: Check for Variation Selector
-            // If it follows the primary char before any components, set a flag.
+        } else if (cp == 0xFE0F) {
             if (components->primary_cp != 0 && components->component_count == 0) {
-                components->flags |= 4; // VS16 flag (bit 3)
+                components->flags |= 4; // VS16 flag
             }
         } else if (is_base_emoji(cp)) {
             if (components->primary_cp == 0) {
@@ -89,9 +90,9 @@ void parse_emoji_string(const char* emoji_str, EmojiComponents* components) {
     components->component_hash = crc32(components->component_list, components->component_count);
 }
 
-// ## 4. ID GENERATOR AND LOOKUP TABLE (Unchanged)
-// ... (generate_emoji_id and the hash table are the same) ...
-uint64_t generate_emoji_id(const EmojiComponents* components) {
+
+// ## 4. ID GENERATOR AND LOOKUP TABLE (Updated to use generated header)
+uint64_t generate_emoji_id(const EmojiComponents *components) {
     uint64_t id = 0;
     id |= ((uint64_t)(components->primary_cp & PRIMARY_CP_MASK) << PRIMARY_CP_SHIFT);
     id |= ((uint64_t)(components->component_hash & HASH_MASK) << HASH_SHIFT);
@@ -107,12 +108,13 @@ typedef struct {
     uint32_t components[16];
 } EmojiHashEntry;
 
-
-//#include "emoji_hash_table_orig.h"
+// Include the auto-generated hash table
 #include "emoji_hash_table.h"
 
 const size_t num_hash_entries = sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);
-int lookup_components_by_hash(uint32_t hash, uint32_t* out_components, size_t* out_count) {
+
+int lookup_components_by_hash(uint32_t hash, uint32_t *out_components, size_t *out_count) {
+    // This could be optimized with a binary search if the table is sorted by hash
     for (size_t i = 0; i < num_hash_entries; ++i) {
         if (emoji_hash_table[i].hash == hash) {
             *out_count = emoji_hash_table[i].count;
@@ -123,7 +125,8 @@ int lookup_components_by_hash(uint32_t hash, uint32_t* out_components, size_t* o
     *out_count = 0;
     return 0;
 }
-void decode_emoji_id(uint64_t id, EmojiComponents* components) {
+
+void decode_emoji_id(uint64_t id, EmojiComponents *components) {
     memset(components, 0, sizeof(EmojiComponents));
     components->primary_cp = (id >> PRIMARY_CP_SHIFT) & PRIMARY_CP_MASK;
     components->component_hash = (id >> HASH_SHIFT) & HASH_MASK;
@@ -131,67 +134,51 @@ void decode_emoji_id(uint64_t id, EmojiComponents* components) {
     components->skin_tone2 = (id >> TONE2_SHIFT) & TONE_MASK;
     components->flags = (id >> FLAGS_SHIFT) & FLAGS_MASK;
     if (components->component_hash != 0) {
-        lookup_components_by_hash(
-            components->component_hash,
-            components->component_list,
-            &components->component_count
-        );
+        lookup_components_by_hash(components->component_hash,
+                                  components->component_list,
+                                  &components->component_count);
     }
 }
 
-// ## 5. RECONSTRUCTOR (MODIFIED)
-int append_utf8(char* buf, size_t buf_size, size_t* offset, uint32_t cp) {
+// ## 5. RECONSTRUCTOR (Unchanged)
+int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp) {
     if (!buf) return 0;
     int bytes_to_write = 0;
-    if (cp < 0x80)        bytes_to_write = 1;
-    else if (cp < 0x800)  bytes_to_write = 2;
+    if (cp < 0x80) bytes_to_write = 1;
+    else if (cp < 0x800) bytes_to_write = 2;
     else if (cp < 0x10000) bytes_to_write = 3;
-    else if (cp < 0x110000)bytes_to_write = 4;
+    else if (cp < 0x110000) bytes_to_write = 4;
     else return 0;
     if (*offset + bytes_to_write >= buf_size) return 0;
-    char* p = buf + *offset;
+
+    char *p = buf + *offset;
     if (bytes_to_write == 1) { *p = (char)cp; }
-    else if (bytes_to_write == 2) {
-        p[0] = 0xC0 | (cp >> 6); p[1] = 0x80 | (cp & 0x3F);
-    } else if (bytes_to_write == 3) {
-        p[0] = 0xE0 | (cp >> 12); p[1] = 0x80 | ((cp >> 6) & 0x3F); p[2] = 0x80 | (cp & 0x3F);
-    } else {
-        p[0] = 0xF0 | (cp >> 18); p[1] = 0x80 | ((cp >> 12) & 0x3F); p[2] = 0x80 | ((cp >> 6) & 0x3F); p[3] = 0x80 | (cp & 0x3F);
-    }
+    else if (bytes_to_write == 2) { p[0] = 0xC0 | (cp >> 6); p[1] = 0x80 | (cp & 0x3F); }
+    else if (bytes_to_write == 3) { p[0] = 0xE0 | (cp >> 12); p[1] = 0x80 | ((cp >> 6) & 0x3F); p[2] = 0x80 | (cp & 0x3F); }
+    else { p[0] = 0xF0 | (cp >> 18); p[1] = 0x80 | ((cp >> 12) & 0x3F); p[2] = 0x80 | ((cp >> 6) & 0x3F); p[3] = 0x80 | (cp & 0x3F); }
     *offset += bytes_to_write;
     return bytes_to_write;
 }
 
-void reconstruct_emoji_string(const EmojiComponents* components, char* out_str, size_t out_str_size) {
+void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, size_t out_str_size) {
     if (!components || !out_str || out_str_size == 0) return;
-    
     size_t offset = 0;
     out_str[0] = '\0';
 
-    // 1. Primary codepoint
     if (components->primary_cp > 0) {
         append_utf8(out_str, out_str_size, &offset, components->primary_cp);
     }
-    
-    // MODIFIED: Check for Variation Selector flag
-    if (components->flags & 4) {
+    if (components->flags & 4) { // VS16 flag
         append_utf8(out_str, out_str_size, &offset, 0xFE0F);
     }
-    
-    // 2. First skin tone
     if (components->skin_tone1 > 0) {
-        uint32_t tone_cp = 0x1F3FB + components->skin_tone1 - 1;
-        append_utf8(out_str, out_str_size, &offset, tone_cp);
+        append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone1 - 1);
     }
-
-    // 3. Components, joined by ZWJ
     for (size_t i = 0; i < components->component_count; i++) {
-        append_utf8(out_str, out_str_size, &offset, 0x200D);
+        append_utf8(out_str, out_str_size, &offset, 0x200D); // ZWJ
         append_utf8(out_str, out_str_size, &offset, components->component_list[i]);
-
         if (i == 0 && components->skin_tone2 > 0) {
-            uint32_t tone_cp = 0x1F3FB + components->skin_tone2 - 1;
-            append_utf8(out_str, out_str_size, &offset, tone_cp);
+            append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone2 - 1);
         }
     }
 
@@ -200,42 +187,110 @@ void reconstruct_emoji_string(const EmojiComponents* components, char* out_str, 
 }
 
 
-// ## 6. MAIN (MODIFIED)
-int main() {
-    // MODIFIED: Added the failing test case to the list.
-    const char* emojis[] = { "🤯", "👍🏽", "🫱🏻‍❤️‍🫲🏼", "👩‍👩‍👧‍👦", "❤️‍🔥", "👨‍🚀"};
-    const char* descriptions[] = {
-        "Simple Emoji", "Emoji with Skin Tone", "Two Tones + Component",
-        "Complex ZWJ Emoji", "Heart on Fire (FIXED)", "Gender + Component"
-    };
-
-    printf("Running Full Round-Trip Emoji ID Tests...\n\n");
-
-    for (int i = 0; i < sizeof(emojis) / sizeof(emojis[0]); i++) {
-        printf("--- Testing: \"%s\" (%s) ---\n", emojis[i], descriptions[i]);
-
-        EmojiComponents original_components;
-        parse_emoji_string(emojis[i], &original_components);
-
-        uint64_t id = generate_emoji_id(&original_components);
-        printf("Generated ID (Hex):       0x%016llX\n", id);
-        
-        EmojiComponents decoded_components;
-        decode_emoji_id(id, &decoded_components);
-
-        char reconstructed_emoji[64] = {0};
-        reconstruct_emoji_string(&decoded_components, reconstructed_emoji, sizeof(reconstructed_emoji));
-        printf("Reconstructed Emoji:      \"%s\"\n", reconstructed_emoji);
-
-        printf("Verifying round-trip...\n");
-        if (strcmp(emojis[i], reconstructed_emoji) != 0) {
-            printf("Round trip failed: original \"%s\" != reconstructed \"%s\"\n", emojis[i], reconstructed_emoji);
-        } else {
-	    printf("SUCCESS: Full round-trip verification passed.\n\n");
-	}
-        
+// Function to run tests from a single Unicode data file (FINAL, MORE ROBUST VERSION)
+// Function to run tests from a single Unicode data file (FINAL, MORE ROBUST VERSION)
+int run_test_suite(const char* filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        perror(filename);
+        return 1;
     }
 
-    printf("All test cases passed!\n");
-    return 0;
+    printf("\n--- Running Test Suite from: %s ---\n", filename);
+    char line[512];
+    int tests_passed = 0;
+    int tests_failed = 0;
+    int line_num = 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        line_num++;
+        // Skip comments and empty lines
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
+            continue;
+        }
+
+        // Find the '#' character which precedes the emoji information
+        char* emoji_comment = strchr(line, '#');
+        if (!emoji_comment) continue;
+
+        // **FIX STARTS HERE: New robust parsing logic**
+        // Scan forward from '#' to find the first multi-byte character (the emoji).
+        // This correctly skips all ASCII annotations like "E17.0" and "[1]".
+        char* emoji_start = emoji_comment + 1;
+        while (*emoji_start != '\0' && (unsigned char)*emoji_start < 0x80) {
+            // Some emojis are wrapped in parentheses, so if we find one,
+            // we start looking from the character inside it.
+            if (*emoji_start == '(') {
+                emoji_start++;
+                break;
+            }
+            emoji_start++;
+        }
+
+        // If we hit the end of the line, no emoji was found.
+        if (*emoji_start == '\0' || *emoji_start == '\n' || *emoji_start == '\r') continue;
+
+        // Find the end of the emoji string. It ends at the next space, tab,
+        // or a closing parenthesis.
+        char* emoji_end = emoji_start;
+        while (*emoji_end != '\0' && *emoji_end != ' ' && *emoji_end != '\t' && *emoji_end != ')') {
+            emoji_end++;
+        }
+        // **FIX ENDS HERE**
+        
+        // Temporarily null-terminate to isolate the emoji string
+        char original_char_at_end = *emoji_end;
+        *emoji_end = '\0';
+        const char *original_emoji = emoji_start;
+
+        // --- Perform the round-trip test ---
+        EmojiComponents original_components, decoded_components;
+        char reconstructed_emoji[64] = {0};
+
+        parse_emoji_string(original_emoji, &original_components);
+        uint64_t id = generate_emoji_id(&original_components);
+        decode_emoji_id(id, &decoded_components);
+        reconstruct_emoji_string(&decoded_components, reconstructed_emoji, sizeof(reconstructed_emoji));
+
+        if (strcmp(original_emoji, reconstructed_emoji) != 0) {
+            printf("FAIL (Line %d): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
+                line_num, original_emoji, reconstructed_emoji, id);
+            tests_failed++;
+        } else {
+            tests_passed++;
+        }
+
+        // Restore the line so we don't modify the buffer
+        *emoji_end = original_char_at_end;
+    }
+
+    fclose(f);
+
+    printf("--- Results for %s: %d Passed, %d Failed ---\n", filename, tests_passed, tests_failed);
+    return tests_failed;
+}
+
+int main() {
+    // List of official Unicode data files to test against.
+    // The Python script will download these for you.
+    const char* test_files[] = {
+        "emoji-sequences.txt",
+        "emoji-zwj-sequences.txt",
+        // "emoji-test.txt" is very comprehensive and can also be added here.
+    };
+    int total_failures = 0;
+
+    printf("🚀 Starting comprehensive emoji round-trip tests...\n");
+
+    for (int i = 0; i < sizeof(test_files) / sizeof(test_files[0]); i++) {
+        total_failures += run_test_suite(test_files[i]);
+    }
+
+    if (total_failures == 0) {
+        printf("\n✅✅✅ All test suites passed! ✅✅✅\n");
+        return EXIT_SUCCESS;
+    } else {
+        printf("\n❌❌❌ Found %d failures in the test suites. ❌❌❌\n", total_failures);
+        return EXIT_FAILURE;
+    }
 }

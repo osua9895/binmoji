@@ -2,3 +2,5 @@
 .envrc
 shell.nix
 *.txt
+tags
+binmoji
