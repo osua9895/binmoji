@@ -166,7 +166,7 @@ static int run_test_suite(const char *filename)
 	return tests_failed;
 }
 
-static int run_all_tests()
+static int run_all_tests(void)
 {
 	size_t i;
 	const char *test_files[] = {
