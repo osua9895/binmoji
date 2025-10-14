@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -33,7 +34,6 @@ uint32_t crc32(const uint32_t *data, size_t length) {
     if (data == NULL || length == 0) return 0;
     for (size_t i = 0; i < length; ++i) {
         uint32_t item = data[i];
-        // Use a standard table-based CRC32 for production, this is slow but simple
         for (int j = 0; j < 32; ++j) {
             uint32_t bit = (item >> (31 - j)) & 1;
             if ((crc >> 31) ^ bit) {
@@ -46,10 +46,10 @@ uint32_t crc32(const uint32_t *data, size_t length) {
     return crc;
 }
 
+// ## 3. PARSER (Refactored)
 // In is_base_emoji, remove the checks for gender and VS16.
 // The only things that are NOT base characters are skin tones and the ZWJ itself.
-int is_base_emoji(uint32_t cp)
-{
+int is_base_emoji(uint32_t cp) {
     if (cp >= 0x1F3FB && cp <= 0x1F3FF) // Skin Tones
         return 0;
     if (cp == 0x200D) // Zero Width Joiner
@@ -76,7 +76,7 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components) {
             uint8_t tone_val = (cp - 0x1F3FB) + 1;
             if (components->skin_tone1 == 0) components->skin_tone1 = tone_val;
             else if (components->skin_tone2 == 0) components->skin_tone2 = tone_val;
-        } 
+        }
         // REMOVED GENDER AND VS16 FLAG LOGIC. They are now components.
         else if (is_base_emoji(cp)) {
             if (components->primary_cp == 0) {
@@ -88,7 +88,6 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components) {
     }
     components->component_hash = crc32(components->component_list, components->component_count);
 }
-
 
 // ## 4. ID GENERATOR AND LOOKUP TABLE (Updated to use generated header)
 uint64_t generate_emoji_id(const EmojiComponents *components) {
@@ -107,13 +106,13 @@ typedef struct {
     uint32_t components[16];
 } EmojiHashEntry;
 
-// Include the auto-generated hash table
+// Include the auto-generated hash table (make sure it's up to date!)
 #include "emoji_hash_table.h"
 
 const size_t num_hash_entries = sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);
 
 int lookup_components_by_hash(uint32_t hash, uint32_t *out_components, size_t *out_count) {
-    // This could be optimized with a binary search if the table is sorted by hash
+    // This could be optimized with a binary search since the Python script sorts by hash
     for (size_t i = 0; i < num_hash_entries; ++i) {
         if (emoji_hash_table[i].hash == hash) {
             *out_count = emoji_hash_table[i].count;
@@ -139,7 +138,7 @@ void decode_emoji_id(uint64_t id, EmojiComponents *components) {
     }
 }
 
-// ## 5. RECONSTRUCTOR (Unchanged)
+// ## 5. RECONSTRUCTOR (Corrected Logic)
 int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp) {
     if (!buf) return 0;
     int bytes_to_write = 0;
@@ -159,30 +158,37 @@ int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp) {
     return bytes_to_write;
 }
 
-// In reconstruct_emoji_string, remove VS16 flag logic and fix skin_tone2 placement.
+// **FIXED**: Reconstruct emoji with corrected ZWJ and skin tone logic.
 void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, size_t out_str_size) {
     if (!components || !out_str || out_str_size == 0) return;
     size_t offset = 0;
     out_str[0] = '\0';
 
+    bool is_flag_sequence = (components->primary_cp >= 0x1F1E6 && components->primary_cp <= 0x1F1FF);
+
     if (components->primary_cp > 0) {
         append_utf8(out_str, out_str_size, &offset, components->primary_cp);
     }
     
-    // REMOVED VS16 FLAG LOGIC. It's now part of the component list.
-
     if (components->skin_tone1 > 0) {
         append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone1 - 1);
     }
 
     for (size_t i = 0; i < components->component_count; i++) {
-        // A ZWJ is only needed if the component is not a VS16 or gender sign
-        // immediately following the primary character. This is complex, but for now
-        // we assume a ZWJ precedes every component.
-        append_utf8(out_str, out_str_size, &offset, 0x200D); // ZWJ
-        append_utf8(out_str, out_str_size, &offset, components->component_list[i]);
+        uint32_t comp = components->component_list[i];
 
-        // FIX: Apply the second skin tone after the LAST component, not the first.
+        // A ZWJ is NOT used before a variation selector or between regional indicators for flags.
+        // This is a heuristic; the Unicode spec has more complex rules for tags, etc.
+        // but this fixes the vast majority of test failures.
+        bool needs_zwj = (comp != 0xFE0F && !is_flag_sequence);
+
+        if (needs_zwj) {
+            append_utf8(out_str, out_str_size, &offset, 0x200D); // ZWJ
+        }
+        
+        append_utf8(out_str, out_str_size, &offset, comp);
+
+        // A second skin tone (for couple emojis) applies to the last component.
         if (i == components->component_count - 1 && components->skin_tone2 > 0) {
             append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone2 - 1);
         }
@@ -192,9 +198,7 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, 
     else if (out_str_size > 0) out_str[out_str_size - 1] = '\0';
 }
 
-
-// Function to run tests from a single Unicode data file (FINAL, MORE ROBUST VERSION)
-// Function to run tests from a single Unicode data file (FINAL, MORE ROBUST VERSION)
+// ## 6. TEST RUNNER (Robust Version)
 int run_test_suite(const char* filename) {
     FILE *f = fopen(filename, "r");
     if (!f) {
@@ -210,46 +214,30 @@ int run_test_suite(const char* filename) {
 
     while (fgets(line, sizeof(line), f)) {
         line_num++;
-        // Skip comments and empty lines
         if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
             continue;
         }
 
-        // Find the '#' character which precedes the emoji information
-        char* emoji_comment = strchr(line, '#');
-        if (!emoji_comment) continue;
+        char* hash_char = strchr(line, '#');
+        if (!hash_char) continue;
 
-        // **FIX STARTS HERE: New robust parsing logic**
-        // Scan forward from '#' to find the first multi-byte character (the emoji).
-        // This correctly skips all ASCII annotations like "E17.0" and "[1]".
-        char* emoji_start = emoji_comment + 1;
+        // **FIX**: Robustly find the start of the emoji in the comment
+        char* emoji_start = hash_char + 1;
         while (*emoji_start != '\0' && (unsigned char)*emoji_start < 0x80) {
-            // Some emojis are wrapped in parentheses, so if we find one,
-            // we start looking from the character inside it.
-            if (*emoji_start == '(') {
-                emoji_start++;
-                break;
-            }
             emoji_start++;
         }
-
-        // If we hit the end of the line, no emoji was found.
         if (*emoji_start == '\0' || *emoji_start == '\n' || *emoji_start == '\r') continue;
-
-        // Find the end of the emoji string. It ends at the next space, tab,
-        // or a closing parenthesis.
-        char* emoji_end = emoji_start;
-        while (*emoji_end != '\0' && *emoji_end != ' ' && *emoji_end != '\t' && *emoji_end != ')') {
-            emoji_end++;
-        }
-        // **FIX ENDS HERE**
         
-        // Temporarily null-terminate to isolate the emoji string
+        // Find the end of the emoji (next space)
+        char* emoji_end = emoji_start;
+	while (*emoji_end != '\0' && *emoji_end != ' ' && *emoji_end != '\t' && *emoji_end != ')' && *emoji_end != '\n' && *emoji_end != '\r') {
+	    emoji_end++;
+	}
+        
         char original_char_at_end = *emoji_end;
         *emoji_end = '\0';
         const char *original_emoji = emoji_start;
 
-        // --- Perform the round-trip test ---
         EmojiComponents original_components, decoded_components;
         char reconstructed_emoji[64] = {0};
 
@@ -260,35 +248,31 @@ int run_test_suite(const char* filename) {
 
         if (strcmp(original_emoji, reconstructed_emoji) != 0) {
             printf("FAIL (Line %d): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
-                line_num, original_emoji, reconstructed_emoji, id);
+                   line_num, original_emoji, reconstructed_emoji, id);
             tests_failed++;
         } else {
             tests_passed++;
         }
 
-        // Restore the line so we don't modify the buffer
         *emoji_end = original_char_at_end;
     }
 
     fclose(f);
-
     printf("--- Results for %s: %d Passed, %d Failed ---\n", filename, tests_passed, tests_failed);
     return tests_failed;
 }
 
 int main() {
-    // List of official Unicode data files to test against.
-    // The Python script will download these for you.
     const char* test_files[] = {
         "emoji-sequences.txt",
+        "emoji-test.txt",
         "emoji-zwj-sequences.txt",
-        // "emoji-test.txt" is very comprehensive and can also be added here.
     };
     int total_failures = 0;
 
     printf("🚀 Starting comprehensive emoji round-trip tests...\n");
 
-    for (int i = 0; i < sizeof(test_files) / sizeof(test_files[0]); i++) {
+    for (size_t i = 0; i < sizeof(test_files) / sizeof(test_files[0]); i++) {
         total_failures += run_test_suite(test_files[i]);
     }
 
