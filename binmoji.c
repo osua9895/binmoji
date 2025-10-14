@@ -272,7 +272,7 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 		out_str[out_str_size - 1] = '\0';
 }
 
-// ## 6. TEST RUNNER (Robust Version)
+// ## 6. TEST RUNNER (Corrected to handle ranges)
 int run_test_suite(const char *filename)
 {
 	FILE *f = fopen(filename, "r");
@@ -289,62 +289,81 @@ int run_test_suite(const char *filename)
 
 	while (fgets(line, sizeof(line), f)) {
 		line_num++;
+		// Skip comments and blank lines
 		if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
 			continue;
 		}
 
-		char *hash_char = strchr(line, '#');
-		if (!hash_char)
-			continue;
+		// Check if the line defines a range or a single sequence
+		if (strstr(line, "..")) {
+			// --- HANDLE RANGES (e.g., 1F31D..1F31E) ---
+			uint32_t start_cp, end_cp;
+			// sscanf is perfect for parsing the hex range at the start of the line
+			if (sscanf(line, "%X..%X", &start_cp, &end_cp) == 2) {
+				for (uint32_t cp = start_cp; cp <= end_cp; ++cp) {
+					char original_emoji[8] = {0};
+					size_t offset = 0;
+					append_utf8(original_emoji, sizeof(original_emoji), &offset, cp);
 
-		// **FIX**: Robustly find the start of the emoji in the comment
-		char *emoji_start = hash_char + 1;
-		while (*emoji_start != '\0' &&
-		       (unsigned char)*emoji_start < 0x80) {
-			emoji_start++;
-		}
-		if (*emoji_start == '\0' || *emoji_start == '\n' ||
-		    *emoji_start == '\r')
-			continue;
+					EmojiComponents components;
+					char reconstructed_emoji[8] = {0};
 
-		// Find the end of the emoji (next space)
-		char *emoji_end = emoji_start;
-		while (*emoji_end != '\0' && *emoji_end != ' ' &&
-		       *emoji_end != '\t' && *emoji_end != ')' &&
-		       *emoji_end != '\n' && *emoji_end != '\r') {
-			emoji_end++;
-		}
+					parse_emoji_string(original_emoji, &components);
+					uint64_t id = generate_emoji_id(&components);
+					decode_emoji_id(id, &components); // Re-use 'components' struct
+					reconstruct_emoji_string(&components, reconstructed_emoji, sizeof(reconstructed_emoji));
 
-		char original_char_at_end = *emoji_end;
-		*emoji_end = '\0';
-		const char *original_emoji = emoji_start;
-
-		EmojiComponents original_components, decoded_components;
-		char reconstructed_emoji[64] = {0};
-
-		parse_emoji_string(original_emoji, &original_components);
-		uint64_t id = generate_emoji_id(&original_components);
-		decode_emoji_id(id, &decoded_components);
-		reconstruct_emoji_string(&decoded_components,
-					 reconstructed_emoji,
-					 sizeof(reconstructed_emoji));
-
-		if (strcmp(original_emoji, reconstructed_emoji) != 0) {
-			printf("FAIL (Line %d): Original: \"%s\" -> "
-			       "Reconstructed: \"%s\" (ID: 0x%016lX)\n",
-			       line_num, original_emoji, reconstructed_emoji,
-			       id);
-			tests_failed++;
+					if (strcmp(original_emoji, reconstructed_emoji) != 0) {
+						printf("FAIL (Line %d, CP: %X): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
+						       line_num, cp, original_emoji, reconstructed_emoji, id);
+						tests_failed++;
+					} else {
+						tests_passed++;
+					}
+				}
+			}
 		} else {
-			tests_passed++;
-		}
+			// --- HANDLE SINGLE SEQUENCES (e.g., from emoji-zwj-sequences.txt) ---
+			char *hash_char = strchr(line, '#');
+			if (!hash_char) continue;
 
-		*emoji_end = original_char_at_end;
+			char *emoji_start = hash_char + 1;
+			while (*emoji_start != '\0' && (unsigned char)*emoji_start < 0x80) {
+				emoji_start++;
+			}
+			if (*emoji_start == '\0' || *emoji_start == '\n' || *emoji_start == '\r') continue;
+
+			char *emoji_end = emoji_start;
+			while (*emoji_end != '\0' && *emoji_end != ' ' && *emoji_end != '\t' &&
+			       *emoji_end != ')' && *emoji_end != '\n' && *emoji_end != '\r') {
+				emoji_end++;
+			}
+
+			char original_char_at_end = *emoji_end;
+			*emoji_end = '\0';
+			const char *original_emoji = emoji_start;
+
+			EmojiComponents original_components, decoded_components;
+			char reconstructed_emoji[64] = {0};
+
+			parse_emoji_string(original_emoji, &original_components);
+			uint64_t id = generate_emoji_id(&original_components);
+			decode_emoji_id(id, &decoded_components);
+			reconstruct_emoji_string(&decoded_components, reconstructed_emoji, sizeof(reconstructed_emoji));
+
+			if (strcmp(original_emoji, reconstructed_emoji) != 0) {
+				printf("FAIL (Line %d): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
+				       line_num, original_emoji, reconstructed_emoji, id);
+				tests_failed++;
+			} else {
+				tests_passed++;
+			}
+			*emoji_end = original_char_at_end;
+		}
 	}
 
 	fclose(f);
-	printf("--- Results for %s: %d Passed, %d Failed ---\n", filename,
-	       tests_passed, tests_failed);
+	printf("--- Results for %s: %d Passed, %d Failed ---\n", filename, tests_passed, tests_failed);
 	return tests_failed;
 }
 
