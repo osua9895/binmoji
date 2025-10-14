@@ -2,7 +2,9 @@
 #include "binmoji.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 static int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 {
@@ -74,7 +76,6 @@ static int run_test_suite(const char *filename)
 		}
 
 		if (strstr(line, "..")) {
-			start_cp, end_cp;
 			if (sscanf(line, "%X..%X", &start_cp, &end_cp) == 2) {
 				for (cp = start_cp; cp <= end_cp; ++cp) {
 					memset(original_emoji, 0,
@@ -102,7 +103,7 @@ static int run_test_suite(const char *filename)
 						    "FAIL (Line %d, CP: %X): "
 						    "Original: \"%s\" -> "
 						    "Reconstructed: \"%s\" "
-						    "(ID: 0x%016lX)\n",
+						    "(ID: 0x%016" PRIX64 ")\n",
 						    line_num, cp,
 						    original_emoji,
 						    reconstructed_emoji, id);
@@ -148,7 +149,7 @@ static int run_test_suite(const char *filename)
 
 			if (strcmp(orig_emoji, reconstructed_emoji) != 0) {
 				printf("FAIL (Line %d): Original: \"%s\" -> "
-				       "Reconstructed: \"%s\" (ID: 0x%016lX)\n",
+				       "Reconstructed: \"%s\" (ID: 0x%016" PRIX64 ")\n",
 				       line_num, orig_emoji,
 				       reconstructed_emoji, id);
 				tests_failed++;
@@ -225,7 +226,7 @@ int main(int argc, char *argv[])
 	/* Check if the input is a hex ID (must start with "0x") */
 	if (strncmp(input, "0x", 2) == 0) {
 		/* --- DECODE from Hex ID to Emoji --- */
-		id = strtoull(input, &endptr, 16);
+		id = strtoul(input, &endptr, 16);
 
 		if (*endptr != '\0') {
 			fprintf(stderr,
