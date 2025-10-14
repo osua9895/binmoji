@@ -93,7 +93,9 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
     b. Append the skin tone modifier corresponding to `skin_tone1` (if not 0).
 
     c. For each codepoint in the retrieved `component_list`:
+
         i. Prepend a Zero-Width Joiner (`0x200D`), with exceptions for sequences that do not use it (e.g., country and subdivision flags).
+
         ii. Append the component codepoint.
 
     d. If `skin_tone2` is set and the emoji is a multi-person sequence, append its corresponding skin tone modifier at the end.
