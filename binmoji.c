@@ -121,23 +121,48 @@ uint64_t binmoji_encode(const struct binmoji *binmoji)
 	return id;
 }
 
+/**
+ * @brief Comparison function for bsearch.
+ *
+ * Compares a target hash key against an EmojiHashEntry's hash.
+ * @param key Pointer to the target uint32_t hash.
+ * @param element Pointer to the EmojiHashEntry from the array.
+ * @return <0 if key is less than element's hash, 0 if equal, >0 if greater.
+ */
+static int compare_emoji_hash(const void *key, const void *element)
+{
+	const uint32_t hash_key = *(const uint32_t *)key;
+	const EmojiHashEntry *entry = (const EmojiHashEntry *)element;
+
+	if (hash_key < entry->hash) {
+		return -1;
+	} else if (hash_key > entry->hash) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+/**
+ * @brief Optimized lookup using binary search.
+ */
 static int lookup_binmoji_by_hash(uint32_t hash, uint32_t *out_binmoji,
 				  size_t *out_count)
 {
-	size_t i;
-	/* This could be optimized with a binary search since the Python script
-	 */
-	/* sorts by hash */
-	for (i = 0; i < num_hash_entries; ++i) {
-		if (emoji_hash_table[i].hash == hash) {
-			*out_count = emoji_hash_table[i].count;
-			memcpy(out_binmoji, emoji_hash_table[i].components,
-			       (*out_count) * sizeof(uint32_t));
-			return 1;
-		}
+	const EmojiHashEntry *result = bsearch(&hash, emoji_hash_table,
+					       num_hash_entries,
+					       sizeof(EmojiHashEntry),
+					       compare_emoji_hash);
+
+	if (result != NULL) {
+		*out_count = result->count;
+		memcpy(out_binmoji, result->components,
+		       (*out_count) * sizeof(uint32_t));
+		return 1; /* Found */
 	}
+
 	*out_count = 0;
-	return 0;
+	return 0; /* Not found */
 }
 
 void binmoji_decode(uint64_t id, struct binmoji *binmoji)
