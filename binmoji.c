@@ -404,8 +404,7 @@ int main(int argc, char *argv[])
 		decode_emoji_id(id, &components);
 		reconstruct_emoji_string(&components, emoji_buffer, sizeof(emoji_buffer));
 
-		printf("ID:    %s\n", input);
-		printf("Emoji: \"%s\"\n", emoji_buffer);
+		printf("%s\n", emoji_buffer);
 
 	} else {
 		// --- ENCODE from Emoji to Hex ID ---
@@ -413,8 +412,7 @@ int main(int argc, char *argv[])
 		parse_emoji_string(input, &components);
 		uint64_t id = generate_emoji_id(&components);
 
-		printf("Emoji: \"%s\"\n", input);
-		printf("ID:    0x%016lX\n", id);
+		printf("0x%016lX\n", id);
 	}
 
 	return EXIT_SUCCESS;
