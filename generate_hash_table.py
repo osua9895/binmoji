@@ -79,7 +79,7 @@ def parse_codepoints_to_components(codepoints: List[int]) -> Dict:
     return components
 
 # -----------------------------------------------------------------------------
-# 2. EMOJI DATA PROCESSING AND FILE GENERATION (Unchanged)
+# 2. EMOJI DATA PROCESSING AND FILE GENERATION
 # -----------------------------------------------------------------------------
 
 UNICODE_VERSION = "15.1"
