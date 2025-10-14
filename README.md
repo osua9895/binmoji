@@ -54,7 +54,7 @@ The simplest emojis have no components or modifiers.
 ```bash
 ./binmoji "❤️"
 # Emoji: "❤️"
-# ID:    0x0000000000000000
+# ID:    0x009D918FB6174C00
 ```
 
 #### **Example 2: A ZWJ sequence**
@@ -64,7 +64,7 @@ The pirate flag is formed by joining 🏴 and ☠️ with a ZWJ.
 ```bash
 ./binmoji "🏴‍☠️"
 # Emoji: "🏴‍☠️"
-# ID:    0x1F3F42694B886C00
+# ID:    0x07CFD3F0E9125C00
 ```
 
 #### **Example 3: An emoji with a single skin tone**
@@ -74,7 +74,7 @@ Here, a dark skin tone is applied to the astronaut.
 ```bash
 ./binmoji "🧑🏿‍🚀"
 # Emoji: "🧑🏿‍🚀"
-# ID:    0x1F9D12E4F8D95540
+# ID:    0x07E746E4F8DD5680
 ```
 
 #### **Example 4: An emoji with two different skin tones**
@@ -84,7 +84,7 @@ This complex sequence requires storing two separate skin tones.
 ```bash
 ./binmoji "👩🏻‍🤝‍👩🏿"
 # Emoji: "👩🏻‍🤝‍👩🏿"
-# ID:    0x1F4693747240B0D0
+# ID:    0x07D1A7747240B0D0
 ```
 
 ### Decode a 64-bit ID to an Emoji
@@ -93,13 +93,13 @@ To convert a Binmoji ID back to its emoji string, pass the hex ID (prefixed with
 
 ```bash
 # Decode the dual skin-tone emoji
-./binmoji 0x1F4693747240B0D0
-# ID:    0x1f4693747240b0d0
+./binmoji 0x07D1A7747240B0D0
+# ID:     0x07D1A7747240B0D0
 # Emoji: "👩🏻‍🤝‍👩🏿"
 
 # Decode the pirate flag
-./binmoji 0x1F3F42694B886C00
-# ID:    0x1f3f42694b886c00
+./binmoji 0x07CFD3F0E9125C00
+# ID:     0x07CFD3F0E9125C00
 # Emoji: "🏴‍☠️"
 ```
 
