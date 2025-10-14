@@ -4,3 +4,5 @@ shell.nix
 *.txt
 tags
 binmoji
+build.log
+.buildcmd

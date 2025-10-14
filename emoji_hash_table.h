@@ -166,4 +166,4 @@ static const EmojiHashEntry emoji_hash_table[] = {
     {0xFFEAA8A7, 1, {0x1FA70}},
 };
 
-#endif // EMOJI_HASH_TABLE_H
+#endif /* EMOJI_HASH_TABLE_H */

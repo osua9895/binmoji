@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ## 1. DEFINITIONS (Unchanged)
+#include "binmoji.h"
+
 #define PRIMARY_CP_SHIFT 42
 #define HASH_SHIFT 10
 #define TONE1_SHIFT 7
@@ -18,26 +19,29 @@
 #define TONE_MASK 0x7
 #define FLAGS_MASK 0xF
 
-// ## 2. STRUCTS AND HASHING (Unchanged)
 typedef struct {
-	uint32_t primary_cp;
-	uint32_t component_list[16];
-	size_t component_count;
-	uint32_t component_hash;
-	uint8_t skin_tone1;
-	uint8_t skin_tone2;
-	uint8_t flags;
-} EmojiComponents;
+	uint32_t hash;
+	size_t count;
+	uint32_t components[16];
+} EmojiHashEntry;
 
-uint32_t crc32(const uint32_t *data, size_t length)
+#include "emoji_hash_table.h"
+
+const size_t num_hash_entries =
+    sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);
+
+static uint32_t crc32(const uint32_t *data, size_t length)
 {
-	uint32_t crc = 0xFFFFFFFF;
+	uint32_t item, bit, crc = 0xFFFFFFFF;
+	size_t i;
+	int j;
+
 	if (data == NULL || length == 0)
 		return 0;
-	for (size_t i = 0; i < length; ++i) {
-		uint32_t item = data[i];
-		for (int j = 0; j < 32; ++j) {
-			uint32_t bit = (item >> (31 - j)) & 1;
+	for (i = 0; i < length; ++i) {
+		item = data[i];
+		for (j = 0; j < 32; ++j) {
+			bit = (item >> (31 - j)) & 1;
 			if ((crc >> 31) ^ bit) {
 				crc = (crc << 1) ^ 0x04C11DB7;
 			} else {
@@ -48,20 +52,21 @@ uint32_t crc32(const uint32_t *data, size_t length)
 	return crc;
 }
 
-// ## 3. PARSER (Unchanged)
-int is_base_emoji(uint32_t cp)
+static int is_base_emoji(uint32_t cp)
 {
-	if (cp >= 0x1F3FB && cp <= 0x1F3FF) // Skin Tones
+	if (cp >= 0x1F3FB && cp <= 0x1F3FF) /* Skin Tones */
 		return 0;
-	if (cp == 0x200D) // Zero Width Joiner
+	if (cp == 0x200D) /* Zero Width Joiner */
 		return 0;
 	return 1;
 }
 
-void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
+void binmoji_parse(const char *emoji_str, struct binmoji *binmoji)
 {
-	memset(components, 0, sizeof(EmojiComponents));
-	const unsigned char *s = (const unsigned char *)emoji_str;
+	const unsigned char *s;
+	memset(binmoji, 0, sizeof(struct binmoji));
+	s = (const unsigned char *)emoji_str;
+
 	while (*s) {
 		uint32_t cp = 0;
 		int len = 0;
@@ -87,57 +92,46 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components)
 
 		if (cp >= 0x1F3FB && cp <= 0x1F3FF) {
 			uint8_t tone_val = (cp - 0x1F3FB) + 1;
-			if (components->skin_tone1 == 0)
-				components->skin_tone1 = tone_val;
-			else if (components->skin_tone2 == 0)
-				components->skin_tone2 = tone_val;
+			if (binmoji->skin_tone1 == 0)
+				binmoji->skin_tone1 = tone_val;
+			else if (binmoji->skin_tone2 == 0)
+				binmoji->skin_tone2 = tone_val;
 		} else if (is_base_emoji(cp)) {
-			if (components->primary_cp == 0) {
-				components->primary_cp = cp;
-			} else if (components->component_count < 16) {
-				components->component_list
-				    [components->component_count++] = cp;
+			if (binmoji->primary_cp == 0) {
+				binmoji->primary_cp = cp;
+			} else if (binmoji->component_count < 16) {
+				binmoji->component_list
+				    [binmoji->component_count++] = cp;
 			}
 		}
 	}
-	components->component_hash =
-	    crc32(components->component_list, components->component_count);
+	binmoji->component_hash =
+	    crc32(binmoji->component_list, binmoji->component_count);
 }
 
-// ## 4. ID GENERATOR AND LOOKUP TABLE (Unchanged)
-uint64_t generate_emoji_id(const EmojiComponents *components)
+uint64_t binmoji_encode(const struct binmoji *binmoji)
 {
 	uint64_t id = 0;
-	id |= ((uint64_t)(components->primary_cp & PRIMARY_CP_MASK)
+	id |= ((uint64_t)(binmoji->primary_cp & PRIMARY_CP_MASK)
 	       << PRIMARY_CP_SHIFT);
-	id |=
-	    ((uint64_t)(components->component_hash & HASH_MASK) << HASH_SHIFT);
-	id |= ((uint64_t)(components->skin_tone1 & TONE_MASK) << TONE1_SHIFT);
-	id |= ((uint64_t)(components->skin_tone2 & TONE_MASK) << TONE2_SHIFT);
-	id |= ((uint64_t)(components->flags & FLAGS_MASK) << FLAGS_SHIFT);
+	id |= ((uint64_t)(binmoji->component_hash & HASH_MASK) << HASH_SHIFT);
+	id |= ((uint64_t)(binmoji->skin_tone1 & TONE_MASK) << TONE1_SHIFT);
+	id |= ((uint64_t)(binmoji->skin_tone2 & TONE_MASK) << TONE2_SHIFT);
+	id |= ((uint64_t)(binmoji->flags & FLAGS_MASK) << FLAGS_SHIFT);
 	return id;
 }
 
-typedef struct {
-	uint32_t hash;
-	size_t count;
-	uint32_t components[16];
-} EmojiHashEntry;
-
-#include "emoji_hash_table.h"
-
-const size_t num_hash_entries =
-    sizeof(emoji_hash_table) / sizeof(emoji_hash_table[0]);
-
-int lookup_components_by_hash(uint32_t hash, uint32_t *out_components,
-			      size_t *out_count)
+static int lookup_binmoji_by_hash(uint32_t hash, uint32_t *out_binmoji,
+				  size_t *out_count)
 {
-	// This could be optimized with a binary search since the Python script
-	// sorts by hash
-	for (size_t i = 0; i < num_hash_entries; ++i) {
+	size_t i;
+	/* This could be optimized with a binary search since the Python script
+	 */
+	/* sorts by hash */
+	for (i = 0; i < num_hash_entries; ++i) {
 		if (emoji_hash_table[i].hash == hash) {
 			*out_count = emoji_hash_table[i].count;
-			memcpy(out_components, emoji_hash_table[i].components,
+			memcpy(out_binmoji, emoji_hash_table[i].components,
 			       (*out_count) * sizeof(uint32_t));
 			return 1;
 		}
@@ -146,27 +140,28 @@ int lookup_components_by_hash(uint32_t hash, uint32_t *out_components,
 	return 0;
 }
 
-void decode_emoji_id(uint64_t id, EmojiComponents *components)
+void binmoji_decode(uint64_t id, struct binmoji *binmoji)
 {
-	memset(components, 0, sizeof(EmojiComponents));
-	components->primary_cp = (id >> PRIMARY_CP_SHIFT) & PRIMARY_CP_MASK;
-	components->component_hash = (id >> HASH_SHIFT) & HASH_MASK;
-	components->skin_tone1 = (id >> TONE1_SHIFT) & TONE_MASK;
-	components->skin_tone2 = (id >> TONE2_SHIFT) & TONE_MASK;
-	components->flags = (id >> FLAGS_SHIFT) & FLAGS_MASK;
-	if (components->component_hash != 0) {
-		lookup_components_by_hash(components->component_hash,
-					  components->component_list,
-					  &components->component_count);
+	memset(binmoji, 0, sizeof(struct binmoji));
+	binmoji->primary_cp = (id >> PRIMARY_CP_SHIFT) & PRIMARY_CP_MASK;
+	binmoji->component_hash = (id >> HASH_SHIFT) & HASH_MASK;
+	binmoji->skin_tone1 = (id >> TONE1_SHIFT) & TONE_MASK;
+	binmoji->skin_tone2 = (id >> TONE2_SHIFT) & TONE_MASK;
+	binmoji->flags = (id >> FLAGS_SHIFT) & FLAGS_MASK;
+	if (binmoji->component_hash != 0) {
+		lookup_binmoji_by_hash(binmoji->component_hash,
+				       binmoji->component_list,
+				       &binmoji->component_count);
 	}
 }
 
-// ## 5. RECONSTRUCTOR (Unchanged)
-int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
+static int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 {
+	char *p;
+	int bytes_to_write = 0;
+
 	if (!buf)
 		return 0;
-	int bytes_to_write = 0;
 	if (cp < 0x80)
 		bytes_to_write = 1;
 	else if (cp < 0x800)
@@ -180,7 +175,7 @@ int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 	if (*offset + bytes_to_write >= buf_size)
 		return 0;
 
-	char *p = buf + *offset;
+	p = buf + *offset;
 	if (bytes_to_write == 1) {
 		*p = (char)cp;
 	} else if (bytes_to_write == 2) {
@@ -200,48 +195,54 @@ int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 	return bytes_to_write;
 }
 
-void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
-			      size_t out_str_size)
+void binmoji_to_string(const struct binmoji *binmoji, char *out_str,
+		       size_t out_str_size)
 {
-	if (!components || !out_str || out_str_size == 0)
+	size_t i, offset;
+	uint32_t comp;
+	bool needs_zwj, is_country_flag, is_subdivision_flag, no_zwj_sequence;
+
+	if (!binmoji || !out_str || out_str_size == 0)
 		return;
-	size_t offset = 0;
+
+	offset = 0;
 	out_str[0] = '\0';
 
-	bool is_country_flag = (components->primary_cp >= 0x1F1E6 &&
-				components->primary_cp <= 0x1F1FF);
+	is_country_flag =
+	    (binmoji->primary_cp >= 0x1F1E6 && binmoji->primary_cp <= 0x1F1FF);
 
-	bool is_subdivision_flag = (components->primary_cp == 0x1F3F4 &&
-				    components->component_count > 0 &&
-				    components->component_list[0] >= 0xE0020 &&
-				    components->component_list[0] <= 0xE007F);
+	is_subdivision_flag =
+	    (binmoji->primary_cp == 0x1F3F4 && binmoji->component_count > 0 &&
+	     binmoji->component_list[0] >= 0xE0020 &&
+	     binmoji->component_list[0] <= 0xE007F);
 
-	bool no_zwj_sequence = is_country_flag || is_subdivision_flag;
+	no_zwj_sequence = is_country_flag || is_subdivision_flag;
 
-	if (components->primary_cp > 0) {
+	if (binmoji->primary_cp > 0) {
 		append_utf8(out_str, out_str_size, &offset,
-			    components->primary_cp);
+			    binmoji->primary_cp);
 	}
 
-	if (components->skin_tone1 > 0) {
+	if (binmoji->skin_tone1 > 0) {
 		append_utf8(out_str, out_str_size, &offset,
-			    0x1F3FB + components->skin_tone1 - 1);
+			    0x1F3FB + binmoji->skin_tone1 - 1);
 	}
 
-	for (size_t i = 0; i < components->component_count; i++) {
-		uint32_t comp = components->component_list[i];
-		bool needs_zwj = (comp != 0xFE0F && comp != 0x20E3 && !no_zwj_sequence);
+	for (i = 0; i < binmoji->component_count; i++) {
+		comp = binmoji->component_list[i];
+		needs_zwj =
+		    (comp != 0xFE0F && comp != 0x20E3 && !no_zwj_sequence);
 
 		if (needs_zwj) {
 			append_utf8(out_str, out_str_size, &offset,
-				    0x200D); // ZWJ
+				    0x200D); /* ZWJ */
 		}
 		append_utf8(out_str, out_str_size, &offset, comp);
 
-		if (i == components->component_count - 1 &&
-		    components->skin_tone2 > 0) {
+		if (i == binmoji->component_count - 1 &&
+		    binmoji->skin_tone2 > 0) {
 			append_utf8(out_str, out_str_size, &offset,
-				    0x1F3FB + components->skin_tone2 - 1);
+				    0x1F3FB + binmoji->skin_tone2 - 1);
 		}
 	}
 
@@ -249,171 +250,4 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str,
 		out_str[offset] = '\0';
 	else if (out_str_size > 0)
 		out_str[out_str_size - 1] = '\0';
-}
-
-
-// ## 6. MAIN AND TEST RUNNER (Updated)
-int run_test_suite(const char *filename)
-{
-	FILE *f = fopen(filename, "r");
-	if (!f) {
-		perror(filename);
-		return 1;
-	}
-
-	printf("\n--- Running Test Suite from: %s ---\n", filename);
-	char line[512];
-	int tests_passed = 0;
-	int tests_failed = 0;
-	int line_num = 0;
-
-	while (fgets(line, sizeof(line), f)) {
-		line_num++;
-		if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
-			continue;
-		}
-
-		if (strstr(line, "..")) {
-			uint32_t start_cp, end_cp;
-			if (sscanf(line, "%X..%X", &start_cp, &end_cp) == 2) {
-				for (uint32_t cp = start_cp; cp <= end_cp; ++cp) {
-					char original_emoji[8] = {0};
-					size_t offset = 0;
-					append_utf8(original_emoji, sizeof(original_emoji), &offset, cp);
-
-					EmojiComponents components;
-					char reconstructed_emoji[8] = {0};
-
-					parse_emoji_string(original_emoji, &components);
-					uint64_t id = generate_emoji_id(&components);
-					decode_emoji_id(id, &components);
-					reconstruct_emoji_string(&components, reconstructed_emoji, sizeof(reconstructed_emoji));
-
-					if (strcmp(original_emoji, reconstructed_emoji) != 0) {
-						printf("FAIL (Line %d, CP: %X): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
-						       line_num, cp, original_emoji, reconstructed_emoji, id);
-						tests_failed++;
-					} else {
-						tests_passed++;
-					}
-				}
-			}
-		} else {
-			char *hash_char = strchr(line, '#');
-			if (!hash_char) continue;
-
-			char *emoji_start = hash_char + 1;
-			while (*emoji_start != '\0' && (unsigned char)*emoji_start < 0x80) {
-				emoji_start++;
-			}
-			if (*emoji_start == '\0' || *emoji_start == '\n' || *emoji_start == '\r') continue;
-
-			char *emoji_end = emoji_start;
-			while (*emoji_end != '\0' && *emoji_end != ' ' && *emoji_end != '\t' &&
-			       *emoji_end != ')' && *emoji_end != '\n' && *emoji_end != '\r') {
-				emoji_end++;
-			}
-
-			char original_char_at_end = *emoji_end;
-			*emoji_end = '\0';
-			const char *original_emoji = emoji_start;
-
-			EmojiComponents original_components, decoded_components;
-			char reconstructed_emoji[64] = {0};
-
-			parse_emoji_string(original_emoji, &original_components);
-			uint64_t id = generate_emoji_id(&original_components);
-			decode_emoji_id(id, &decoded_components);
-			reconstruct_emoji_string(&decoded_components, reconstructed_emoji, sizeof(reconstructed_emoji));
-
-			if (strcmp(original_emoji, reconstructed_emoji) != 0) {
-				printf("FAIL (Line %d): Original: \"%s\" -> Reconstructed: \"%s\" (ID: 0x%016lX)\n",
-				       line_num, original_emoji, reconstructed_emoji, id);
-				tests_failed++;
-			} else {
-				tests_passed++;
-			}
-			*emoji_end = original_char_at_end;
-		}
-	}
-
-	fclose(f);
-	printf("--- Results for %s: %d Passed, %d Failed ---\n", filename, tests_passed, tests_failed);
-	return tests_failed;
-}
-
-int run_all_tests()
-{
-	const char *test_files[] = {
-	    "emoji-sequences.txt",
-	    "emoji-test.txt",
-	    "emoji-zwj-sequences.txt",
-	};
-	int total_failures = 0;
-
-	printf("🚀 Starting comprehensive emoji round-trip tests...\n");
-
-	for (size_t i = 0; i < sizeof(test_files) / sizeof(test_files[0]);
-	     i++) {
-		total_failures += run_test_suite(test_files[i]);
-	}
-
-	if (total_failures == 0) {
-		printf("\n✅✅✅ All test suites passed! ✅✅✅\n");
-		return EXIT_SUCCESS;
-	} else {
-		printf(
-		    "\n❌❌❌ Found %d failures in the test suites. ❌❌❌\n",
-		    total_failures);
-		return EXIT_FAILURE;
-	}
-}
-
-int main(int argc, char *argv[])
-{
-	// Check for --test flag to run the test suite
-	if (argc == 2 && strcmp(argv[1], "--test") == 0) {
-		return run_all_tests();
-	}
-
-	// For conversions, exactly one argument is required
-	if (argc != 2) {
-		fprintf(stderr, "Usage:\n");
-		fprintf(stderr, "  %s \"<emoji>\"       (to convert emoji to hex ID)\n", argv[0]);
-		fprintf(stderr, "  %s <0x_hex_id>     (to convert hex ID to emoji)\n", argv[0]);
-		fprintf(stderr, "  %s --test          (to run the test suite)\n", argv[0]);
-		return EXIT_FAILURE;
-	}
-
-	const char *input = argv[1];
-
-	// Check if the input is a hex ID (must start with "0x")
-	if (strncmp(input, "0x", 2) == 0) {
-		// --- DECODE from Hex ID to Emoji ---
-		char *endptr;
-		uint64_t id = strtoull(input, &endptr, 16);
-
-		if (*endptr != '\0') {
-			fprintf(stderr, "Error: Invalid hexadecimal ID format: %s\n", input);
-			return EXIT_FAILURE;
-		}
-
-		EmojiComponents components;
-		char emoji_buffer[64] = {0};
-
-		decode_emoji_id(id, &components);
-		reconstruct_emoji_string(&components, emoji_buffer, sizeof(emoji_buffer));
-
-		printf("%s\n", emoji_buffer);
-
-	} else {
-		// --- ENCODE from Emoji to Hex ID ---
-		EmojiComponents components;
-		parse_emoji_string(input, &components);
-		uint64_t id = generate_emoji_id(&components);
-
-		printf("0x%016lX\n", id);
-	}
-
-	return EXIT_SUCCESS;
 }
