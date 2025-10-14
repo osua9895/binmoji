@@ -14,6 +14,7 @@
   * **Lossless Conversion**: Guarantees perfect round-trip conversion from emoji to ID and back.
   * **Unicode Compliant**: The lookup table is generated from the official Unicode emoji data files, ensuring compatibility.
   * **Self-Contained**: Includes a test suite to verify correctness against the Unicode standard.
+  * **Small lookup table**: Skin tone variations are flags, leading to a [small multi-component lookup table](./emoji_hash_table.h) (~158 entries)
 
 -----
 
