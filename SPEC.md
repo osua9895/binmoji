@@ -77,6 +77,7 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
     * Subsequent base emojis are added to the `component_list`.
     * The first two skin tone modifiers found are converted to integers (1-5) and stored in `skin_tone1` and `skin_tone2`.
     * The Zero-Width Joiner (`0x200D`) acts as a delimiter and is not stored.
+
 3.  **Hash Components:** If the `component_list` is not empty, the CRC-32 hash is calculated on it and stored as `component_hash`.
 4.  **Assemble ID:** The final 64-bit ID is assembled by bit-shifting each field into its correct position and combining them with a bitwise OR operation.
 
@@ -88,11 +89,15 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
 2.  **Lookup Components:** If `component_hash` is not zero, it is used as a key to look up the original `component_list` in the pre-computed `emoji_hash_table.h`. If the hash is not found, the emoji cannot be fully reconstructed.
 3.  **Reconstruct String:** The final UTF-8 emoji string is built in sequence:
     a. Append the `primary_cp`.
+
     b. Append the skin tone modifier corresponding to `skin_tone1` (if not 0).
+
     c. For each codepoint in the retrieved `component_list`:
         i. Prepend a Zero-Width Joiner (`0x200D`), with exceptions for sequences that do not use it (e.g., country and subdivision flags).
         ii. Append the component codepoint.
+
     d. If `skin_tone2` is set and the emoji is a multi-person sequence, append its corresponding skin tone modifier at the end.
+
     e. The resulting buffer is null-terminated.
 
 ---
@@ -103,6 +108,7 @@ The Binmoji format relies on a pre-computed lookup table to reverse the componen
 
 #### `generate_hash_table.py`
 This Python script is responsible for creating the `emoji_hash_table.h` C header file. Its process is:
+
 1.  Downloads the official emoji data files (`emoji-sequences.txt`, `emoji-zwj-sequences.txt`, etc.) from the Unicode Consortium for a specific version (e.g., 15.1).
 2.  Parses every valid emoji sequence from these files.
 3.  For each sequence with components, it calculates the CRC-32 hash using a Python implementation identical to the C version.
