@@ -51,11 +51,11 @@ static uint32_t crc32(const uint32_t *data, size_t length)
 	return crc;
 }
 
-static int is_base_emoji(uint32_t cp)
+static int is_base_emoji(uint32_t codepoint)
 {
-	if (cp >= 0x1F3FB && cp <= 0x1F3FF) /* Skin Tones */
+	if (codepoint >= 0x1F3FB && codepoint <= 0x1F3FF) /* Skin Tones */
 		return 0;
-	if (cp == 0x200D) /* Zero Width Joiner */
+	if (codepoint == 0x200D) /* Zero Width Joiner */
 		return 0;
 	return 1;
 }
@@ -67,40 +67,41 @@ void binmoji_parse(const char *emoji_str, struct binmoji *binmoji)
 	s = (const unsigned char *)emoji_str;
 
 	while (*s) {
-		uint32_t cp = 0;
+		uint32_t codepoint = 0;
 		int len = 0;
 		if (*s < 0x80) {
 			len = 1;
-			cp = s[0];
+			codepoint = s[0];
 		} else if ((*s & 0xE0) == 0xC0) {
 			len = 2;
-			cp = ((s[0] & 0x1F) << 6) | (s[1] & 0x3F);
+			codepoint = ((s[0] & 0x1F) << 6) | (s[1] & 0x3F);
 		} else if ((*s & 0xF0) == 0xE0) {
 			len = 3;
-			cp = ((s[0] & 0x0F) << 12) | ((s[1] & 0x3F) << 6) |
-			     (s[2] & 0x3F);
+			codepoint = ((s[0] & 0x0F) << 12) |
+				    ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
 		} else if ((*s & 0xF8) == 0xF0) {
 			len = 4;
-			cp = ((s[0] & 0x07) << 18) | ((s[1] & 0x3F) << 12) |
-			     ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+			codepoint = ((s[0] & 0x07) << 18) |
+				    ((s[1] & 0x3F) << 12) |
+				    ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
 		} else {
 			s++;
 			continue;
 		}
 		s += len;
 
-		if (cp >= 0x1F3FB && cp <= 0x1F3FF) {
-			uint8_t tone_val = (cp - 0x1F3FB) + 1;
+		if (codepoint >= 0x1F3FB && codepoint <= 0x1F3FF) {
+			uint8_t tone_val = (codepoint - 0x1F3FB) + 1;
 			if (binmoji->skin_tone1 == 0)
 				binmoji->skin_tone1 = tone_val;
 			else if (binmoji->skin_tone2 == 0)
 				binmoji->skin_tone2 = tone_val;
-		} else if (is_base_emoji(cp)) {
-			if (binmoji->primary_cp == 0) {
-				binmoji->primary_cp = cp;
+		} else if (is_base_emoji(codepoint)) {
+			if (binmoji->primary_codepoint == 0) {
+				binmoji->primary_codepoint = codepoint;
 			} else if (binmoji->component_count < 16) {
 				binmoji->component_list
-				    [binmoji->component_count++] = cp;
+				    [binmoji->component_count++] = codepoint;
 			}
 		}
 	}
@@ -111,7 +112,7 @@ void binmoji_parse(const char *emoji_str, struct binmoji *binmoji)
 uint64_t binmoji_encode(const struct binmoji *binmoji)
 {
 	uint64_t id = 0;
-	id |= ((uint64_t)(binmoji->primary_cp & PRIMARY_CP_MASK)
+	id |= ((uint64_t)(binmoji->primary_codepoint & PRIMARY_CP_MASK)
 	       << PRIMARY_CP_SHIFT);
 	id |= ((uint64_t)(binmoji->component_hash & HASH_MASK) << HASH_SHIFT);
 	id |= ((uint64_t)(binmoji->skin_tone1 & TONE_MASK) << TONE1_SHIFT);
@@ -148,10 +149,9 @@ static int compare_emoji_hash(const void *key, const void *element)
 static int lookup_binmoji_by_hash(uint32_t hash, uint32_t *out_binmoji,
 				  size_t *out_count)
 {
-	const EmojiHashEntry *result = bsearch(&hash, binmoji_table,
-					       num_hash_entries,
-					       sizeof(EmojiHashEntry),
-					       compare_emoji_hash);
+	const EmojiHashEntry *result =
+	    bsearch(&hash, binmoji_table, num_hash_entries,
+		    sizeof(EmojiHashEntry), compare_emoji_hash);
 
 	if (result != NULL) {
 		*out_count = result->count;
@@ -167,7 +167,7 @@ static int lookup_binmoji_by_hash(uint32_t hash, uint32_t *out_binmoji,
 void binmoji_decode(uint64_t id, struct binmoji *binmoji)
 {
 	memset(binmoji, 0, sizeof(struct binmoji));
-	binmoji->primary_cp = (id >> PRIMARY_CP_SHIFT) & PRIMARY_CP_MASK;
+	binmoji->primary_codepoint = (id >> PRIMARY_CP_SHIFT) & PRIMARY_CP_MASK;
 	binmoji->component_hash = (id >> HASH_SHIFT) & HASH_MASK;
 	binmoji->skin_tone1 = (id >> TONE1_SHIFT) & TONE_MASK;
 	binmoji->skin_tone2 = (id >> TONE2_SHIFT) & TONE_MASK;
@@ -179,20 +179,21 @@ void binmoji_decode(uint64_t id, struct binmoji *binmoji)
 	}
 }
 
-static int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
+static int append_utf8(char *buf, size_t buf_size, size_t *offset,
+		       uint32_t codepoint)
 {
 	char *p;
 	int bytes_to_write = 0;
 
 	if (!buf)
 		return 0;
-	if (cp < 0x80)
+	if (codepoint < 0x80)
 		bytes_to_write = 1;
-	else if (cp < 0x800)
+	else if (codepoint < 0x800)
 		bytes_to_write = 2;
-	else if (cp < 0x10000)
+	else if (codepoint < 0x10000)
 		bytes_to_write = 3;
-	else if (cp < 0x110000)
+	else if (codepoint < 0x110000)
 		bytes_to_write = 4;
 	else
 		return 0;
@@ -201,19 +202,19 @@ static int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 
 	p = buf + *offset;
 	if (bytes_to_write == 1) {
-		*p = (char)cp;
+		*p = (char)codepoint;
 	} else if (bytes_to_write == 2) {
-		p[0] = 0xC0 | (cp >> 6);
-		p[1] = 0x80 | (cp & 0x3F);
+		p[0] = 0xC0 | (codepoint >> 6);
+		p[1] = 0x80 | (codepoint & 0x3F);
 	} else if (bytes_to_write == 3) {
-		p[0] = 0xE0 | (cp >> 12);
-		p[1] = 0x80 | ((cp >> 6) & 0x3F);
-		p[2] = 0x80 | (cp & 0x3F);
+		p[0] = 0xE0 | (codepoint >> 12);
+		p[1] = 0x80 | ((codepoint >> 6) & 0x3F);
+		p[2] = 0x80 | (codepoint & 0x3F);
 	} else {
-		p[0] = 0xF0 | (cp >> 18);
-		p[1] = 0x80 | ((cp >> 12) & 0x3F);
-		p[2] = 0x80 | ((cp >> 6) & 0x3F);
-		p[3] = 0x80 | (cp & 0x3F);
+		p[0] = 0xF0 | (codepoint >> 18);
+		p[1] = 0x80 | ((codepoint >> 12) & 0x3F);
+		p[2] = 0x80 | ((codepoint >> 6) & 0x3F);
+		p[3] = 0x80 | (codepoint & 0x3F);
 	}
 	*offset += bytes_to_write;
 	return bytes_to_write;
@@ -232,19 +233,19 @@ void binmoji_to_string(const struct binmoji *binmoji, char *out_str,
 	offset = 0;
 	out_str[0] = '\0';
 
-	is_country_flag =
-	    (binmoji->primary_cp >= 0x1F1E6 && binmoji->primary_cp <= 0x1F1FF);
+	is_country_flag = (binmoji->primary_codepoint >= 0x1F1E6 &&
+			   binmoji->primary_codepoint <= 0x1F1FF);
 
-	is_subdivision_flag =
-	    (binmoji->primary_cp == 0x1F3F4 && binmoji->component_count > 0 &&
-	     binmoji->component_list[0] >= 0xE0020 &&
-	     binmoji->component_list[0] <= 0xE007F);
+	is_subdivision_flag = (binmoji->primary_codepoint == 0x1F3F4 &&
+			       binmoji->component_count > 0 &&
+			       binmoji->component_list[0] >= 0xE0020 &&
+			       binmoji->component_list[0] <= 0xE007F);
 
 	no_zwj_sequence = is_country_flag || is_subdivision_flag;
 
-	if (binmoji->primary_cp > 0) {
+	if (binmoji->primary_codepoint > 0) {
 		append_utf8(out_str, out_str_size, &offset,
-			    binmoji->primary_cp);
+			    binmoji->primary_codepoint);
 	}
 
 	if (binmoji->skin_tone1 > 0) {

@@ -52,7 +52,7 @@ def parse_emoji_string(emoji_str: str) -> dict:
     It identifies the primary codepoint, components, skin tones, and flags.
     """
     components = {
-        'primary_cp': 0,
+        'primary_codepoint': 0,
         'component_list': [],
         'skin_tone1': 0,
         'skin_tone2': 0,
@@ -75,8 +75,8 @@ def parse_emoji_string(emoji_str: str) -> dict:
         elif cp == 0x2640:  # Female sign
             components['flags'] |= 2
         elif is_base_emoji(cp):
-            if components['primary_cp'] == 0:
-                components['primary_cp'] = cp
+            if components['primary_codepoint'] == 0:
+                components['primary_codepoint'] = cp
             elif len(components['component_list']) < 16:
                 components['component_list'].append(cp)
 
@@ -138,7 +138,7 @@ def main():
                 # Only print if a hash was actually generated
                 if parsed['hash'] != 0:
                     count += 1
-                    primary_hex = f"U+{parsed['primary_cp']:X}"
+                    primary_hex = f"U+{parsed['primary_codepoint']:X}"
                     components_hex = ", ".join([f"U+{cp:X}" for cp in parsed['component_list']])
                     hash_hex = f"0x{parsed['hash']:08X}"
                     

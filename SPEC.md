@@ -73,7 +73,7 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
 
 1.  **Parse String:** The input UTF-8 emoji string is parsed into a sequence of Unicode codepoints.
 2.  **Deconstruct:** The codepoint sequence is iterated through to populate an `EmojiComponents` structure:
-    * The first valid base emoji is stored as `primary_cp`.
+    * The first valid base emoji is stored as `primary_codepoint`.
     * Subsequent base emojis are added to the `component_list`.
     * The first two skin tone modifiers found are converted to integers (1-5) and stored in `skin_tone1` and `skin_tone2`.
     * The Zero-Width Joiner (`0x200D`) acts as a delimiter and is not stored.
@@ -85,10 +85,10 @@ The 4-bit `flags` field is reserved for future use or for metadata that cannot b
 
 ### 5. Decoding Process (64-bit ID → Emoji String)
 
-1.  **Extract Fields:** The `primary_cp`, `component_hash`, `skin_tone1`, `skin_tone2`, and `flags` are extracted from the 64-bit ID using bitmasks and shifts.
+1.  **Extract Fields:** The `primary_codepoint`, `component_hash`, `skin_tone1`, `skin_tone2`, and `flags` are extracted from the 64-bit ID using bitmasks and shifts.
 2.  **Lookup Components:** If `component_hash` is not zero, it is used as a key to look up the original `component_list` in the pre-computed `emoji_hash_table.h`. If the hash is not found, the emoji cannot be fully reconstructed.
 3.  **Reconstruct String:** The final UTF-8 emoji string is built in sequence:
-    a. Append the `primary_cp`.
+    a. Append the `primary_codepoint`.
 
     b. Append the skin tone modifier corresponding to `skin_tone1` (if not 0).
 
