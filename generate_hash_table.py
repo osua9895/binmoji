@@ -32,26 +32,28 @@ def crc32(data: List[int]) -> int:
 
 def is_base_emoji(cp: int) -> bool:
     """
-    Checks if a codepoint is a base emoji character, mirroring the C helper.
+    Checks if a codepoint is a base emoji character.
+    This now matches the updated C logic.
     """
     if 0x1F3FB <= cp <= 0x1F3FF:  # Skin Tones
         return False
-    if cp in [0x200D, 0xFE0F]:    # ZWJ, Variation Selector
+    if cp == 0x200D:              # Zero Width Joiner
         return False
-    if cp in [0x2640, 0x2642]:    # Gender signs (Female, Male)
-        return False
+    # Gender signs (2640, 2642) and VS16 (FE0F) are now considered "base"
+    # so they can be added to the component list.
     return True
 
 def parse_codepoints_to_components(codepoints: List[int]) -> Dict:
     """
-    Parses a list of codepoints into its primary, components, tones, and flags.
-    This logic must exactly match the C parser.
+    Parses a list of codepoints into its primary and components.
+    This logic now exactly matches the updated C parser.
     """
     components = {
         'primary_cp': 0,
         'component_list': [],
         'skin_tone1': 0,
         'skin_tone2': 0,
+        # Flags are no longer used for gender or VS16
         'flags': 0,
         'hash': 0
     }
@@ -63,14 +65,8 @@ def parse_codepoints_to_components(codepoints: List[int]) -> Dict:
                 components['skin_tone1'] = tone_val
             elif components['skin_tone2'] == 0:
                 components['skin_tone2'] = tone_val
-        elif cp == 0x2642:
-            components['flags'] |= 1  # Male flag
-        elif cp == 0x2640:
-            components['flags'] |= 2  # Female flag
-        elif cp == 0xFE0F:
-            # VS16 flag applies if it immediately follows the primary codepoint
-            if components['primary_cp'] != 0 and not components['component_list']:
-                components['flags'] |= 4
+        # REMOVED GENDER AND VS16 FLAG LOGIC.
+        # They are now handled by is_base_emoji and added as components.
         elif is_base_emoji(cp):
             if components['primary_cp'] == 0:
                 components['primary_cp'] = cp
@@ -83,7 +79,7 @@ def parse_codepoints_to_components(codepoints: List[int]) -> Dict:
     return components
 
 # -----------------------------------------------------------------------------
-# 2. EMOJI DATA PROCESSING AND FILE GENERATION
+# 2. EMOJI DATA PROCESSING AND FILE GENERATION (Unchanged)
 # -----------------------------------------------------------------------------
 
 UNICODE_VERSION = "15.1"
@@ -129,7 +125,6 @@ def main():
     for filename in FILE_LIST:
         download_file(BASE_URL + filename, filename)
     
-    # Use a dictionary to store unique hashes and their component lists
     unique_hashes: Dict[int, List[int]] = {}
     processed_sequences: Set[tuple] = set()
 
@@ -140,22 +135,18 @@ def main():
                 if line.startswith('#') or not line.strip():
                     continue
                 
-                # Extract codepoints from the beginning of the line
                 codepoint_str = line.split(';')[0].strip()
                 try:
                     codepoints = [int(cp, 16) for cp in codepoint_str.split()]
                 except ValueError:
-                    continue # Skip malformed lines
+                    continue
 
-                # Avoid processing the same sequence twice if it appears in multiple files
                 if tuple(codepoints) in processed_sequences:
                     continue
                 processed_sequences.add(tuple(codepoints))
 
-                # Parse and hash the sequence
                 parsed = parse_codepoints_to_components(codepoints)
                 
-                # We only care about sequences that have components
                 if parsed['hash'] != 0:
                     if parsed['hash'] in unique_hashes and unique_hashes[parsed['hash']] != parsed['component_list']:
                         sys.stderr.write(f"Collision detected! Hash 0x{parsed['hash']:08X} is shared.\n")

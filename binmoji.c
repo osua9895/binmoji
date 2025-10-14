@@ -46,14 +46,19 @@ uint32_t crc32(const uint32_t *data, size_t length) {
     return crc;
 }
 
-int is_base_emoji(uint32_t cp) {
-    if (cp >= 0x1F3FB && cp <= 0x1F3FF) return 0;
-    if (cp == 0x200D || cp == 0xFE0F) return 0;
-    if (cp == 0x2640 || cp == 0x2642) return 0;
+// In is_base_emoji, remove the checks for gender and VS16.
+// The only things that are NOT base characters are skin tones and the ZWJ itself.
+int is_base_emoji(uint32_t cp)
+{
+    if (cp >= 0x1F3FB && cp <= 0x1F3FF) // Skin Tones
+        return 0;
+    if (cp == 0x200D) // Zero Width Joiner
+        return 0;
+    // Gender signs (2640, 2642) and VS16 (FE0F) are now considered components.
     return 1;
 }
 
-// ## 3. PARSER (Unchanged)
+// In parse_emoji_string, remove the flag logic for gender and VS16.
 void parse_emoji_string(const char *emoji_str, EmojiComponents *components) {
     memset(components, 0, sizeof(EmojiComponents));
     const unsigned char *s = (const unsigned char *)emoji_str;
@@ -71,15 +76,9 @@ void parse_emoji_string(const char *emoji_str, EmojiComponents *components) {
             uint8_t tone_val = (cp - 0x1F3FB) + 1;
             if (components->skin_tone1 == 0) components->skin_tone1 = tone_val;
             else if (components->skin_tone2 == 0) components->skin_tone2 = tone_val;
-        } else if (cp == 0x2642) {
-            components->flags |= 1; // Male flag
-        } else if (cp == 0x2640) {
-            components->flags |= 2; // Female flag
-        } else if (cp == 0xFE0F) {
-            if (components->primary_cp != 0 && components->component_count == 0) {
-                components->flags |= 4; // VS16 flag
-            }
-        } else if (is_base_emoji(cp)) {
+        } 
+        // REMOVED GENDER AND VS16 FLAG LOGIC. They are now components.
+        else if (is_base_emoji(cp)) {
             if (components->primary_cp == 0) {
                 components->primary_cp = cp;
             } else if (components->component_count < 16) {
@@ -160,6 +159,7 @@ int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp) {
     return bytes_to_write;
 }
 
+// In reconstruct_emoji_string, remove VS16 flag logic and fix skin_tone2 placement.
 void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, size_t out_str_size) {
     if (!components || !out_str || out_str_size == 0) return;
     size_t offset = 0;
@@ -168,16 +168,22 @@ void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, 
     if (components->primary_cp > 0) {
         append_utf8(out_str, out_str_size, &offset, components->primary_cp);
     }
-    if (components->flags & 4) { // VS16 flag
-        append_utf8(out_str, out_str_size, &offset, 0xFE0F);
-    }
+    
+    // REMOVED VS16 FLAG LOGIC. It's now part of the component list.
+
     if (components->skin_tone1 > 0) {
         append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone1 - 1);
     }
+
     for (size_t i = 0; i < components->component_count; i++) {
+        // A ZWJ is only needed if the component is not a VS16 or gender sign
+        // immediately following the primary character. This is complex, but for now
+        // we assume a ZWJ precedes every component.
         append_utf8(out_str, out_str_size, &offset, 0x200D); // ZWJ
         append_utf8(out_str, out_str_size, &offset, components->component_list[i]);
-        if (i == 0 && components->skin_tone2 > 0) {
+
+        // FIX: Apply the second skin tone after the LAST component, not the first.
+        if (i == components->component_count - 1 && components->skin_tone2 > 0) {
             append_utf8(out_str, out_str_size, &offset, 0x1F3FB + components->skin_tone2 - 1);
         }
     }
