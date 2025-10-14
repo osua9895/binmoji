@@ -1,7 +1,6 @@
 # Binmoji: A Compact 64-bit Emoji Encoding Library
 
 [Specification](./SPEC.md)
-
 [](https://opensource.org/licenses/MIT)
 
 **Binmoji** is a C library and command-line tool that encodes any standard Unicode emoji into a single, fixed-size 64-bit integer (`uint64_t`). This provides a highly efficient, compact, and indexable alternative to storing emojis as variable-length UTF-8 strings.
@@ -22,13 +21,13 @@
 
 An emoji sequence is deconstructed into its fundamental parts, which are then packed into a 64-bit integer.
 
-| Bits (63-0) | Field Name | Size (bits) | Description |
-| :--- | :--- | :--- | :--- |
-| `63-42` | **Primary Codepoint** | 22 | The first base emoji in the sequence (e.g., '👩'). |
-| `41-10` | **Component Hash** | 32 | A CRC-32 hash of all subsequent emojis (e.g., '‍👩‍👧‍👦'). |
-| `9-7` | **Skin Tone 1** | 3 | The first skin tone modifier. |
-| `6-4` | **Skin Tone 2** | 3 | The second skin tone modifier (for couple/family emojis). |
-| `3-0` | **Flags** | 4 | Reserved for future use. |
+| Bits (63-0) | Field Name        | Size (bits) | Description                                                  |
+| :---------- | :---------------- | :---------- | :----------------------------------------------------------- |
+| `63-42`     | **Primary Codepoint** | 22          | The first base emoji in the sequence (e.g., '👩').            |
+| `41-10`     | **Component Hash** | 32          | A CRC-32 hash of all subsequent emojis (e.g., '‍👩‍👧‍👦'). |
+| `9-7`       | **Skin Tone 1** | 3           | The first skin tone modifier.                                |
+| `6-4`       | **Skin Tone 2** | 3           | The second skin tone modifier (for couple/family emojis).    |
+| `3-0`       | **Flags** | 4           | Reserved for future use.                                     |
 
 Because hashing is a one-way process, a pre-computed lookup table (`emoji_hash_table.h`) is used to map a **Component Hash** back to its original list of component codepoints during decoding.
 
@@ -36,21 +35,7 @@ Because hashing is a one-way process, a pre-computed lookup table (`emoji_hash_t
 
 ## Building the Project 🛠️
 
-The project requires a one-time setup step to generate the emoji hash table.
-
-1.  **Generate the Hash Table**: Run the Python script to download the latest Unicode emoji data and create the C header file.
-
-    ```bash
-    python3 generate_hash_table.py
-    ```
-
-    This will create `emoji_hash_table.h` and download the necessary `emoji-*.txt` files.
-
-2.  **Compile the C Code**: Use a C compiler like GCC to build the command-line tool.
-
-    ```bash
-    gcc -o binmoji binmoji.c -O2 -Wall
-    ```
+Just type `make` with a C compiler. You can regenerate the small ZWJ sequence hash table by getting the txt files from https://www.unicode.org/Public/17.0.0/emoji/
 
 -----
 
@@ -60,20 +45,46 @@ The compiled `binmoji` executable can be used for encoding, decoding, and testin
 
 ### Encode an Emoji to a 64-bit ID
 
-To convert an emoji string to its Binmoji ID, pass the emoji as an argument.
+Pass the emoji string as an argument to get its unique Binmoji ID. The tool handles everything from simple icons to complex ZWJ sequences with multiple skin tones.
+
+#### **Example 1: A simple emoji**
+
+The simplest emojis have no components or modifiers.
 
 ```bash
 ./binmoji "❤️"
 # Emoji: "❤️"
 # ID:    0x0000000000000000
+```
 
-./binmoji "👩‍👩‍👧‍👦"
-# Emoji: "👩‍👩‍👧‍👦"
-# ID:    0x1271D50C48000000
+#### **Example 2: A ZWJ sequence**
 
-./binmoji "👍🏾"
-# Emoji: "👍🏾"
-# ID:    0x1250400000000200
+The pirate flag is formed by joining 🏴 and ☠️ with a ZWJ.
+
+```bash
+./binmoji "🏴‍☠️"
+# Emoji: "🏴‍☠️"
+# ID:    0x1F3F42694B886C00
+```
+
+#### **Example 3: An emoji with a single skin tone**
+
+Here, a dark skin tone is applied to the astronaut.
+
+```bash
+./binmoji "🧑🏿‍🚀"
+# Emoji: "🧑🏿‍🚀"
+# ID:    0x1F9D12E4F8D95540
+```
+
+#### **Example 4: An emoji with two different skin tones**
+
+This complex sequence requires storing two separate skin tones.
+
+```bash
+./binmoji "👩🏻‍🤝‍👩🏿"
+# Emoji: "👩🏻‍🤝‍👩🏿"
+# ID:    0x1F4693747240B0D0
 ```
 
 ### Decode a 64-bit ID to an Emoji
@@ -81,13 +92,15 @@ To convert an emoji string to its Binmoji ID, pass the emoji as an argument.
 To convert a Binmoji ID back to its emoji string, pass the hex ID (prefixed with `0x`) as an argument.
 
 ```bash
-./binmoji 0x1271D50C48000000
-# ID:    0x1271d50c48000000
-# Emoji: "👩‍👩‍👧‍👦"
+# Decode the dual skin-tone emoji
+./binmoji 0x1F4693747240B0D0
+# ID:    0x1f4693747240b0d0
+# Emoji: "👩🏻‍🤝‍👩🏿"
 
-./binmoji 0x1250400000000200
-# ID:    0x1250400000000200
-# Emoji: "👍🏾"
+# Decode the pirate flag
+./binmoji 0x1F3F42694B886C00
+# ID:    0x1f3f42694b886c00
+# Emoji: "🏴‍☠️"
 ```
 
 ### Run the Test Suite
@@ -116,9 +129,3 @@ The main functions are:
       * Decodes a 64-bit ID into an `EmojiComponents` struct, using the hash table to look up components.
   * `void reconstruct_emoji_string(const EmojiComponents *components, char *out_str, size_t out_str_size);`
       * Builds the final UTF-8 emoji string from a decoded `EmojiComponents` struct.
-
------
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
