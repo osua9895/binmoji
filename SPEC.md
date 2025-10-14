@@ -111,7 +111,7 @@ The Binmoji format relies on a pre-computed lookup table to reverse the componen
 #### `generate_hash_table.py`
 This Python script is responsible for creating the `emoji_hash_table.h` C header file. Its process is:
 
-1.  Downloads the official emoji data files (`emoji-sequences.txt`, `emoji-zwj-sequences.txt`, etc.) from the Unicode Consortium for a specific version (e.g., 15.1).
+1.  Downloads the official emoji data files (`emoji-sequences.txt`, `emoji-test.txt`, `emoji-zwj-sequences.txt`, etc.) from the Unicode Consortium for a specific version (e.g., 15.1).
 2.  Parses every valid emoji sequence from these files.
 3.  For each sequence with components, it calculates the CRC-32 hash using a Python implementation identical to the C version.
 4.  It stores each unique hash and its corresponding component list.
