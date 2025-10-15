@@ -92,6 +92,8 @@ static int run_test_suite(const char *filename)
 
 					binmoji_parse(original_emoji, &binmoji);
 					id = binmoji_encode(&binmoji);
+					/* set user flag to make sure it doesn't break anything */
+					id = binmoji_set_user_flag(id, 1);
 					binmoji_decode(id, &binmoji);
 					binmoji_to_string(
 					    &binmoji, reconstructed_emoji,
