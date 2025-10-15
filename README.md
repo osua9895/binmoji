@@ -52,6 +52,8 @@ binmoji can be used for storing emojis in succinct data structures without havin
 
 I wanted an emoji ID that didn't require massive rainbow tables for every possible emoji combination. by moving some skin tone data into bits, our lookup table can be much smaller, which avoids code bloat.
 
+This is simple enough that I believe it can become the canonical 64-bit emoji representation used across various systems. Let me know if you agree or disagree!
+
 -----
 
 ## Building the Project 🛠️
