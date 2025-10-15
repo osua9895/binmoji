@@ -32,7 +32,7 @@ An emoji sequence is deconstructed into its fundamental parts, which are then pa
 | `6-4`       | **Skin Tone 2** | 3           | The second skin tone modifier (for couple/family emojis).    |
 | `3-0`       | **Flags** | 4           | Reserved for future use.                                     |
 
-Because hashing is a one-way process, a pre-computed lookup table (`emoji_hash_table.h`) is used to map a **Component Hash** back to its original list of component codepoints during decoding.
+Because hashing is a one-way process, a pre-computed lookup table (`binmoji_table.h`) is used to map a **Component Hash** back to its original list of component codepoints during decoding.
 
 -----
 
