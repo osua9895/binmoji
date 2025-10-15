@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
 
 static int append_utf8(char *buf, size_t buf_size, size_t *offset, uint32_t cp)
 {
@@ -92,8 +93,10 @@ static int run_test_suite(const char *filename)
 
 					binmoji_parse(original_emoji, &binmoji);
 					id = binmoji_encode(&binmoji);
+					assert(binmoji_get_user_flag(id) == 0);
 					/* set user flag to make sure it doesn't break anything */
 					id = binmoji_set_user_flag(id, 1);
+					assert(binmoji_get_user_flag(id) == 1);
 					binmoji_decode(id, &binmoji);
 					binmoji_to_string(
 					    &binmoji, reconstructed_emoji,
