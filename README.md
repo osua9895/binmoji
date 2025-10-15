@@ -56,6 +56,12 @@ This is simple enough that I believe it can become the canonical 64-bit emoji re
 
 -----
 
+### Future proofing: Collisions
+
+There is a possibility of collisions in the future, we can use the reserved flags as a nonce for known collisions if this ever comes up.
+
+-----
+
 ## Building the Project 🛠️
 
 Just type `make` with a C compiler. You can regenerate the small ZWJ sequence hash table by getting the txt files from https://www.unicode.org/Public/17.0.0/emoji/. We also provide a snapshot of these in the repository for convenience.
