@@ -1,4 +1,4 @@
-# binmoji: a lossless, 64-bit emoji encoding
+# binmoji: a compact, lossless, 64-bit emoji encoding
 
 [![Build Status](https://github.com/jb55/binmoji/actions/workflows/ci.yml/badge.svg)](https://github.com/jb55/binmoji/actions/workflows/ci.yml)
 
