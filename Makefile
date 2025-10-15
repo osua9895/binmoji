@@ -12,7 +12,7 @@ binmoji_table.h: generate_hash_table.py $(EMOJI_FILES)
 check: binmoji
 	./binmoji --test
 
-format: binmoji.c binmoji.h
+format: binmoji.c
 	clang-format -style="{BasedOnStyle: LLVM, IndentWidth: 8, UseTab: Always, BreakBeforeBraces: Linux}" -i $^
 
 emojis:
